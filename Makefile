@@ -23,7 +23,7 @@ include $(THEOS_MAKE_PATH)/tweak.mk
 
 # ── Background Daemon ────────────────────────────────────────────────────────
 TOOL_NAME := BTShareDaemon
-BTShareDaemon_FILES      := BTShareDaemon/main.m BTShareDaemon/DaemonTransferServer.m TransferManager.m
+BTShareDaemon_FILES      := Daemon/main.m Daemon/DaemonTransferServer.m TransferManager.m
 BTShareDaemon_FRAMEWORKS := CoreBluetooth Foundation UserNotifications UIKit
 BTShareDaemon_CFLAGS     := -fobjc-arc -I$(THEOS_PROJECT_DIR) -Wno-error -Wno-objc-designated-initializers -Wno-unused-variable
 BTShareDaemon_INSTALL_PATH := /usr/libexec
@@ -33,7 +33,7 @@ include $(THEOS_MAKE_PATH)/tool.mk
 # ── Preferences Pane ────────────────────────────────────────────────────────
 BUNDLE_NAME := BlueSharePrefs
 BlueSharePrefs_FILES      := Prefs/BSPrefsListController.m
-BlueSharePrefs_FRAMEWORKS := UIKit
+BlueSharePrefs_FRAMEWORKS := UIKit QuartzCore
 BlueSharePrefs_PRIVATE_FRAMEWORKS := Preferences
 BlueSharePrefs_CFLAGS     := -fobjc-arc -Wno-error -Wno-objc-designated-initializers -Wno-unused-variable
 BlueSharePrefs_INSTALL_PATH := /Library/PreferenceBundles
