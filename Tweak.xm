@@ -1,9 +1,11 @@
 // Tweak.xm
-// Injects BlueShare "Send via Bluetooth" into every share sheet across iOS.
+// Injects BlueShare "Share to Android" into every share sheet across iOS.
+// Starts the unsandboxed HTTP transfer daemon in SpringBoard.
 // Author: Sanket Yadav
 
 #import <UIKit/UIKit.h>
 #import "BTShareActivity.h"
+#import "DevicePickerViewController.h"
 
 // ── Preferences helper ────────────────────────────────────────────────────────
 static BOOL bsEnabled(void) {
@@ -50,16 +52,23 @@ static NSArray *injectBTShareActivity(NSArray *activities) {
 
 // ── Constructor ───────────────────────────────────────────────────────────────
 %ctor {
-    // Safety guard: NEVER inject or touch package managers / system daemons
     NSString *bundleID = [NSBundle mainBundle].bundleIdentifier;
+
+    // When running inside SpringBoard (unsandboxed): start the transfer daemon!
+    if ([bundleID isEqualToString:@"com.apple.springboard"]) {
+        NSLog(@"[BlueShare] Injected into SpringBoard (unsandboxed). Starting transfer server...");
+        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(1.5 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+            [[BSSimpleHTTPServer sharedServer] startListening];
+        });
+        return;
+    }
+
+    // Safety guard: NEVER inject or touch package managers / system daemons
     if ([bundleID hasPrefix:@"org.coolstar"] ||
         [bundleID isEqualToString:@"xyz.willy.Zebra"] ||
         [bundleID isEqualToString:@"com.tigisoftware.Filza"] ||
         [bundleID isEqualToString:@"org.cydia.Cydia"] ||
         [bundleID isEqualToString:@"com.saurik.Cydia"]) {
-        return; // Early return: do not hook package managers!
+        return;
     }
-
-    // Do NOT start Bluetooth advertising here!
-    // The background daemon (BTShareDaemon) handles incoming connections.
 }

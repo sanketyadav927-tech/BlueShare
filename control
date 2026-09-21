@@ -1,6 +1,6 @@
 Package: com.yourrepo.blueshare
 Name: BlueShare
-Version: 1.2.0
+Version: 1.2.1
 Architecture: iphoneos-arm
 Description: Instant Share photos, videos, and files to Android Gallery & nearby devices.
 Maintainer: Sanket Yadav <sanketyadav927@gmail.com>
