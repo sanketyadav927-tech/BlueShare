@@ -20,77 +20,69 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      # ── 2. Pre-create dir with correct permissions ────────────────────────────
-      - name: Setup /opt/theos directory
-        run: |
-          sudo mkdir -p /opt/theos/sdks
-          sudo chown -R "$USER" /opt/theos
+      # ── 2. Allow writing to /opt (don't create /opt/theos yet — git clone will) 
+      - name: Allow writes to /opt
+        run: sudo chmod 777 /opt
 
-      # ── 3. Cache Theos clone ──────────────────────────────────────────────────
+      # ── 3. Cache Theos ────────────────────────────────────────────────────────
       - name: Cache Theos
         id: cache-theos
         uses: actions/cache@v4
         with:
           path: /opt/theos
-          key: theos-clone-${{ runner.arch }}-v5
+          key: theos-clone-${{ runner.arch }}-v6
 
-      # ── 4. Clone Theos directly (skip install script entirely) ────────────────
+      # ── 4. Clone Theos (git clone creates /opt/theos itself) ─────────────────
       - name: Clone Theos
         if: steps.cache-theos.outputs.cache-hit != 'true'
         run: |
           git clone --recursive \
             https://github.com/theos/theos.git \
             /opt/theos
+          mkdir -p /opt/theos/sdks
 
-      # ── 5. Download iOS SDK via gh CLI (pre-installed, handles auth + URLs) ───
-      #   gh release download is the most reliable way — no broken redirect issues.
+      # ── 5. Download iOS SDK via gh CLI ───────────────────────────────────────
       - name: Download iOS SDK
         if: steps.cache-theos.outputs.cache-hit != 'true'
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          # List available releases so we pick the right filename
-          gh release list --repo theos/sdks --limit 5
-
-          # Download the latest iOS SDK from the theos/sdks repo
+          mkdir -p /tmp/sdks
           gh release download \
             --repo theos/sdks \
             --pattern "iPhoneOS*.sdk.tar.xz" \
             --dir /tmp/sdks/
-
-          # Extract whichever SDK was downloaded
           for f in /tmp/sdks/*.tar.xz; do
-            echo "Extracting $f..."
+            echo "Extracting $f"
             tar -xJf "$f" -C /opt/theos/sdks/
           done
-
-          echo "SDKs installed:"
+          echo "Installed SDKs:"
           ls /opt/theos/sdks/
 
-      # ── 6. Install ldid (code signing, required by Theos) ────────────────────
+      # ── 6. Install ldid ───────────────────────────────────────────────────────
       - name: Install ldid
         run: brew install ldid
 
-      # ── 7. Build the .deb ────────────────────────────────────────────────────
+      # ── 7. Build ──────────────────────────────────────────────────────────────
       - name: Build
         run: |
           export PATH="$THEOS/bin:$PATH"
           make clean
           make package FINALPACKAGE=1
 
-      # ── 8. Show output ───────────────────────────────────────────────────────
+      # ── 8. Show output ────────────────────────────────────────────────────────
       - name: List packages
         run: ls -lh packages/
 
-      # ── 9. Upload .deb as artifact ───────────────────────────────────────────
-      - name: Upload .deb artifact
+      # ── 9. Upload artifact ────────────────────────────────────────────────────
+      - name: Upload .deb
         uses: actions/upload-artifact@v4
         with:
           name: BlueShare-deb
           path: packages/*.deb
           retention-days: 30
 
-      # ── 10. GitHub Release (only on git tags like v1.0.0) ────────────────────
+      # ── 10. GitHub Release on version tags ────────────────────────────────────
       - name: Create Release
         if: startsWith(github.ref, 'refs/tags/v')
         uses: softprops/action-gh-release@v2
@@ -100,8 +92,7 @@ jobs:
           body: |
             ## BlueShare ${{ github.ref_name }}
             **by Sanket Yadav**
-
-            ### Install on your iPhone
+            ### Install
             ```bash
             scp BlueShare*.deb root@<device-ip>:/var/root/
             ssh root@<device-ip> "dpkg -i /var/root/BlueShare*.deb && killall SpringBoard"
