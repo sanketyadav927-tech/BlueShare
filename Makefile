@@ -3,6 +3,8 @@ ARCHS   := arm64
 
 include $(THEOS)/makefiles/common.mk
 
+ADDITIONAL_CFLAGS := -Wno-error -Wno-objc-designated-initializers -Wno-unused-variable -Wno-unused-function -Wno-deprecated-declarations
+
 # ── Main Tweak ──────────────────────────────────────────────────────────────
 TWEAK_NAME := BlueShare
 BlueShare_FILES := \
@@ -13,7 +15,7 @@ BlueShare_FILES := \
 
 BlueShare_FRAMEWORKS  := UIKit CoreBluetooth CoreFoundation UserNotifications
 BlueShare_PRIVATE_FRAMEWORKS :=
-BlueShare_CFLAGS      := -fobjc-arc -Wno-unused-variable
+BlueShare_CFLAGS      := -fobjc-arc -Wno-error -Wno-objc-designated-initializers -Wno-unused-variable
 BlueShare_LDFLAGS     :=
 BlueShare_LIBRARIES   :=
 
@@ -23,7 +25,7 @@ include $(THEOS_MAKE_PATH)/tweak.mk
 TOOL_NAME := BTShareDaemon
 BTShareDaemon_FILES      := BTShareDaemon/main.m BTShareDaemon/DaemonTransferServer.m TransferManager.m
 BTShareDaemon_FRAMEWORKS := CoreBluetooth Foundation UserNotifications UIKit
-BTShareDaemon_CFLAGS     := -fobjc-arc -I$(THEOS_PROJECT_DIR)
+BTShareDaemon_CFLAGS     := -fobjc-arc -I$(THEOS_PROJECT_DIR) -Wno-error -Wno-objc-designated-initializers -Wno-unused-variable
 BTShareDaemon_INSTALL_PATH := /usr/libexec
 
 include $(THEOS_MAKE_PATH)/tool.mk
@@ -31,8 +33,9 @@ include $(THEOS_MAKE_PATH)/tool.mk
 # ── Preferences Pane ────────────────────────────────────────────────────────
 BUNDLE_NAME := BlueSharePrefs
 BlueSharePrefs_FILES      := Prefs/BSPrefsListController.m
-BlueSharePrefs_FRAMEWORKS := UIKit Preferences
-BlueSharePrefs_CFLAGS     := -fobjc-arc
+BlueSharePrefs_FRAMEWORKS := UIKit
+BlueSharePrefs_PRIVATE_FRAMEWORKS := Preferences
+BlueSharePrefs_CFLAGS     := -fobjc-arc -Wno-error -Wno-objc-designated-initializers -Wno-unused-variable
 BlueSharePrefs_INSTALL_PATH := /Library/PreferenceBundles
 
 include $(THEOS_MAKE_PATH)/bundle.mk

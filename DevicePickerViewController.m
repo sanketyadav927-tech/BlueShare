@@ -88,17 +88,31 @@
 
 @implementation DevicePickerViewController
 
-- (instancetype)initWithFileURLs:(NSArray<NSURL *> *)fileURLs {
-    if ((self = [super initWithStyle:UITableViewStyleInsetGrouped])) {
-        _fileURLs = [fileURLs copy];
+- (instancetype)initWithStyle:(UITableViewStyle)style {
+    if ((self = [super initWithStyle:style])) {
+        _fileURLs = @[];
         _peers    = [NSMutableArray new];
     }
     return self;
 }
 
-// Required override: satisfies the superclass designated initializer chain
-- (instancetype)initWithNibName:(NSString *)nibNameOrNil bundle:(NSBundle *)nibBundleOrNil {
-    return [self initWithFileURLs:@[]];
+- (instancetype)initWithNibName:(nullable NSString *)nibNameOrNil bundle:(nullable NSBundle *)nibBundleOrNil {
+    return [self initWithStyle:UITableViewStyleInsetGrouped];
+}
+
+- (nullable instancetype)initWithCoder:(NSCoder *)coder {
+    if ((self = [super initWithCoder:coder])) {
+        _fileURLs = @[];
+        _peers    = [NSMutableArray new];
+    }
+    return self;
+}
+
+- (instancetype)initWithFileURLs:(NSArray<NSURL *> *)fileURLs {
+    if ((self = [self initWithStyle:UITableViewStyleInsetGrouped])) {
+        _fileURLs = [fileURLs copy];
+    }
+    return self;
 }
 
 // ── Lifecycle ─────────────────────────────────────────────────────────────────

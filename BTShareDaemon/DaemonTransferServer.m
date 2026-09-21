@@ -77,7 +77,7 @@ static NSString *const kBSActionDecline  = @"BS_DECLINE";
     // Fire a local notification with Accept/Decline actions
     UNMutableNotificationContent *content = [UNMutableNotificationContent new];
     content.title    = @"Incoming Bluetooth File";
-    content.body     = [NSString stringWithFormat:@"%@ wants to send you "%@" (%.1f KB)",
+    content.body     = [NSString stringWithFormat:@"%@ wants to send you \"%@\" (%.1f KB)",
                         senderName, meta.fileName, meta.totalBytes / 1024.0];
     content.sound    = [UNNotificationSound defaultSound];
     content.categoryIdentifier = kBSCategory;
@@ -99,7 +99,7 @@ static NSString *const kBSActionDecline  = @"BS_DECLINE";
     // Notify user that the file arrived
     UNMutableNotificationContent *content = [UNMutableNotificationContent new];
     content.title = @"File Received ✅";
-    content.body  = [NSString stringWithFormat:@""%@" saved to BlueShare folder.",
+    content.body  = [NSString stringWithFormat:@"\"%@\" saved to BlueShare folder.",
                      path.lastPathComponent];
     content.sound = [UNNotificationSound defaultSound];
 

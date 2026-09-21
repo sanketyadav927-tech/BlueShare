@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
+  "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  LaunchDaemon plist for BTShareDaemon.
+  Installed to /Library/LaunchDaemons/ so launchd starts it at boot.
+-->
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.yourrepo.btsharedaemon</string>
+
+    <key>ProgramArguments</key>
+    <array>
+        <string>/usr/libexec/BTShareDaemon</string>
+    </array>
+
+    <!-- Start at boot, restart on crash -->
+    <key>RunAtLoad</key>
+    <true/>
+    <key>KeepAlive</key>
+    <true/>
+
+    <!-- Bluetooth entitlement required -->
+    <key>EnvironmentVariables</key>
+    <dict/>
+
+    <key>StandardErrorPath</key>
+    <string>/var/log/BTShareDaemon.log</string>
+    <key>StandardOutPath</key>
+    <string>/var/log/BTShareDaemon.log</string>
+</dict>
+</plist>

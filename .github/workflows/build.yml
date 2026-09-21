@@ -72,7 +72,9 @@ jobs:
 
       # ── 8. Show output ────────────────────────────────────────────────────────
       - name: List packages
-        run: ls -lh packages/
+        run: |
+          ls -lh packages/ || true
+          find . -name "*.deb"
 
       # ── 9. Upload artifact ────────────────────────────────────────────────────
       - name: Upload .deb
