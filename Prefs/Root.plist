@@ -10,7 +10,7 @@
             <key>label</key>
             <string>General</string>
             <key>footerText</key>
-            <string>Share any file with nearby iPhones over Bluetooth.</string>
+            <string>Instant zero-setup file transfer to any Android phone.</string>
         </dict>
         <dict>
             <key>cell</key>

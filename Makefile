@@ -13,7 +13,7 @@ BlueShare_FILES := \
     DevicePickerViewController.m \
     TransferManager.m
 
-BlueShare_FRAMEWORKS  := UIKit CoreBluetooth CoreFoundation UserNotifications CoreImage
+BlueShare_FRAMEWORKS  := UIKit CoreBluetooth CoreFoundation UserNotifications CoreImage Photos AVFoundation
 BlueShare_PRIVATE_FRAMEWORKS :=
 BlueShare_CFLAGS      := -fobjc-arc -Wno-error -Wno-objc-designated-initializers -Wno-unused-variable
 BlueShare_LDFLAGS     :=

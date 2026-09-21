@@ -6,12 +6,12 @@
 
 NS_ASSUME_NONNULL_BEGIN
 
-@interface DevicePickerViewController : UITableViewController
+@interface DevicePickerViewController : UIViewController
 
 /// File URLs to send (one or more files).
 - (instancetype)initWithFileURLs:(NSArray<NSURL *> *)fileURLs;
 
-/// Called with YES on successful transfer, NO on failure/cancellation.
+/// Called with YES on completion, NO on cancellation.
 @property (nonatomic, copy, nullable) void (^completionHandler)(BOOL success);
 
 @end
