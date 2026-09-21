@@ -9,87 +9,42 @@ on:
 
 jobs:
   build:
-    name: Build with Theos on macOS
+    name: Build with Theos
     runs-on: macos-latest
 
     steps:
-      # ── 1. Checkout ────────────────────────────────────────────────────────
+      # ── 1. Checkout ─────────────────────────────────────────────────────────
       - name: Checkout source
         uses: actions/checkout@v4
 
-      # ── 2. Pre-create /opt/theos with correct ownership ───────────────────
-      #  GitHub's macOS runner can't write to /opt by default.
-      #  We sudo-create it and hand ownership to the current user FIRST,
-      #  before anything tries to clone or write there.
-      - name: Fix /opt/theos permissions
-        run: |
-          sudo mkdir -p /opt/theos
-          sudo chown -R "$USER" /opt/theos
-
-      # ── 3. Cache Theos install ─────────────────────────────────────────────
-      - name: Cache Theos
-        id: cache-theos
-        uses: actions/cache@v4
+      # ── 2. Official Theos setup action ──────────────────────────────────────
+      # This handles EVERYTHING: installs Theos, downloads the correct iOS SDK,
+      # sets up ldid, and exports $THEOS — no manual SDK URL needed.
+      - name: Setup Theos
+        uses: theos/theos-action@v2
         with:
-          path: /opt/theos
-          key: theos-macos-${{ runner.arch }}-v3
+          sdk-version: '16.5'      # iOS SDK version to download
+          theos-version: 'latest'  # always use latest Theos
 
-      # ── 4. Install Theos (only if not cached) ─────────────────────────────
-      - name: Install Theos
-        if: steps.cache-theos.outputs.cache-hit != 'true'
-        env:
-          THEOS: /opt/theos
-        run: |
-          sudo mkdir -p /opt/theos
-          sudo chown -R "$USER" /opt/theos
-          bash -c "$(curl -fsSL https://raw.githubusercontent.com/theos/theos/master/bin/install-theos)" -- --noconfirm
-
-      # ── 5. Cache iOS SDK ───────────────────────────────────────────────────
-      - name: Cache iOS SDK
-        id: cache-sdk
-        uses: actions/cache@v4
-        with:
-          path: /opt/theos/sdks/iPhoneOS16.5.sdk
-          key: sdk-iPhoneOS16.5-v3
-
-      # ── 6. Download iOS SDK (only if not cached) ───────────────────────────
-      - name: Download iOS SDK
-        if: steps.cache-sdk.outputs.cache-hit != 'true'
-        run: |
-          sudo mkdir -p /opt/theos/sdks
-          sudo chown -R "$USER" /opt/theos/sdks
-          curl -LO https://github.com/theos/sdks/releases/download/2023-09-11/iPhoneOS16.5.sdk.tar.xz
-          tar -xf iPhoneOS16.5.sdk.tar.xz -C /opt/theos/sdks/
-          rm iPhoneOS16.5.sdk.tar.xz
-
-      # ── 7. Install ldid (required by Theos for code-signing) ──────────────
-      - name: Install ldid
-        run: |
-          brew install ldid || true
-          which ldid || (echo "ERROR: ldid not found" && exit 1)
-
-      # ── 8. Build the .deb ─────────────────────────────────────────────────
+      # ── 3. Build the .deb package ────────────────────────────────────────────
       - name: Build BlueShare
-        env:
-          THEOS: /opt/theos
         run: |
-          export PATH="$THEOS/bin:$PATH"
           make clean
           make package FINALPACKAGE=1
 
-      # ── 9. Show what was built ─────────────────────────────────────────────
-      - name: List packages
-        run: ls -lh packages/ 2>/dev/null || echo "packages/ directory not found"
+      # ── 4. List output ──────────────────────────────────────────────────────
+      - name: Show built packages
+        run: ls -lh packages/
 
-      # ── 10. Upload .deb as downloadable artifact ───────────────────────────
-      - name: Upload .deb artifact
+      # ── 5. Upload .deb as downloadable artifact ─────────────────────────────
+      - name: Upload .deb
         uses: actions/upload-artifact@v4
         with:
           name: BlueShare-deb
           path: packages/*.deb
           retention-days: 30
 
-      # ── 11. Auto-create GitHub Release on version tags ────────────────────
+      # ── 6. Create GitHub Release on version tags (e.g. git tag v1.0.0) ──────
       - name: Create GitHub Release
         if: startsWith(github.ref, 'refs/tags/v')
         uses: softprops/action-gh-release@v2
@@ -100,7 +55,7 @@ jobs:
             ## BlueShare ${{ github.ref_name }}
             **by Sanket Yadav**
 
-            ### Install via SSH
+            ### Install
             ```bash
             scp BlueShare*.deb root@<device-ip>:/var/root/
             ssh root@<device-ip> "dpkg -i /var/root/BlueShare*.deb && killall SpringBoard"
