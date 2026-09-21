@@ -10,8 +10,6 @@
         <string>PSLinkCell</string>
         <key>detail</key>
         <string>BSPrefsListController</string>
-        <key>icon</key>
-        <string>icon.png</string>
         <key>isController</key>
         <true/>
         <key>label</key>

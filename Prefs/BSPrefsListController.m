@@ -12,11 +12,12 @@
 @end
 
 @implementation BSBannerView
+
 - (instancetype)initWithFrame:(CGRect)frame {
     if ((self = [super initWithFrame:frame])) {
         // Gradient background
         CAGradientLayer *grad = [CAGradientLayer layer];
-        grad.frame = self.bounds;
+        grad.frame = CGRectMake(0, 0, [UIScreen mainScreen].bounds.size.width, 90);
         grad.colors = @[
             (__bridge id)[UIColor colorWithRed:0.0 green:0.48 blue:1.0 alpha:1.0].CGColor,
             (__bridge id)[UIColor colorWithRed:0.2 green:0.2 blue:0.9 alpha:1.0].CGColor,
@@ -27,66 +28,92 @@
 
         // BT icon
         UIImageSymbolConfiguration *cfg = [UIImageSymbolConfiguration
-            configurationWithPointSize:40 weight:UIImageSymbolWeightMedium];
+            configurationWithPointSize:36 weight:UIImageSymbolWeightMedium];
         UIImage *icon = [UIImage systemImageNamed:@"antenna.radiowaves.left.and.right"
                                withConfiguration:cfg];
         UIImageView *iv = [[UIImageView alloc] initWithImage:
             [icon imageWithRenderingMode:UIImageRenderingModeAlwaysTemplate]];
         iv.tintColor = [UIColor whiteColor];
-        iv.translatesAutoresizingMaskIntoConstraints = NO;
+        iv.frame = CGRectMake(20, 25, 40, 40);
+        iv.contentMode = UIViewContentModeScaleAspectFit;
 
         // Tweak name label
-        UILabel *nameLabel = [UILabel new];
+        UILabel *nameLabel = [[UILabel alloc] initWithFrame:CGRectMake(74, 18, 250, 32)];
         nameLabel.text = @"BlueShare";
-        nameLabel.font = [UIFont systemFontOfSize:28 weight:UIFontWeightBold];
+        nameLabel.font = [UIFont systemFontOfSize:26 weight:UIFontWeightBold];
         nameLabel.textColor = [UIColor whiteColor];
-        nameLabel.translatesAutoresizingMaskIntoConstraints = NO;
 
         // Author label
-        UILabel *authorLabel = [UILabel new];
+        UILabel *authorLabel = [[UILabel alloc] initWithFrame:CGRectMake(74, 50, 250, 20)];
         authorLabel.text = @"by Sanket Yadav";
         authorLabel.font = [UIFont systemFontOfSize:13 weight:UIFontWeightMedium];
-        authorLabel.textColor = [UIColor colorWithWhite:1.0 alpha:0.75];
-        authorLabel.translatesAutoresizingMaskIntoConstraints = NO;
+        authorLabel.textColor = [UIColor colorWithWhite:1.0 alpha:0.8];
 
         [self addSubview:iv];
         [self addSubview:nameLabel];
         [self addSubview:authorLabel];
-
-        [NSLayoutConstraint activateConstraints:@[
-            [iv.leadingAnchor  constraintEqualToAnchor:self.leadingAnchor  constant:24],
-            [iv.centerYAnchor constraintEqualToAnchor:self.centerYAnchor],
-
-            [nameLabel.leadingAnchor constraintEqualToAnchor:iv.trailingAnchor constant:14],
-            [nameLabel.topAnchor    constraintEqualToAnchor:self.topAnchor    constant:22],
-
-            [authorLabel.leadingAnchor constraintEqualToAnchor:nameLabel.leadingAnchor],
-            [authorLabel.topAnchor    constraintEqualToAnchor:nameLabel.bottomAnchor constant:4],
-        ]];
     }
     return self;
 }
 
 - (void)layoutSubviews {
     [super layoutSubviews];
-    // Keep gradient in sync with frame
     for (CALayer *l in self.layer.sublayers) {
-        if ([l isKindOfClass:[CAGradientLayer class]]) l.frame = self.bounds;
+        if ([l isKindOfClass:[CAGradientLayer class]]) {
+            l.frame = self.bounds;
+        }
     }
 }
+
 @end
 
+// ── BSPrefsListController ─────────────────────────────────────────────────────
 @implementation BSPrefsListController
 
-// ── Custom banner at top of pane ──────────────────────────────────────────────
-- (UIView *)tableView:(UITableView *)tableView viewForHeaderInSection:(NSInteger)section {
-    if (section != 0) return nil;
-    BSBannerView *banner = [[BSBannerView alloc] initWithFrame:CGRectMake(0, 0, tableView.bounds.size.width, 90)];
-    return banner;
+- (void)viewDidLoad {
+    [super viewDidLoad];
+
+    CGFloat width = self.table.bounds.size.width;
+    if (width <= 0) {
+        width = [UIScreen mainScreen].bounds.size.width;
+    }
+    BSBannerView *banner = [[BSBannerView alloc] initWithFrame:CGRectMake(0, 0, width, 90)];
+    banner.autoresizingMask = UIViewAutoresizingFlexibleWidth;
+    self.table.tableHeaderView = banner;
 }
 
-- (CGFloat)tableView:(UITableView *)tableView heightForHeaderInSection:(NSInteger)section {
-    return section == 0 ? 90 : UITableViewAutomaticDimension;
+// ── Preferences Read/Write Helpers ────────────────────────────────────────────
+- (id)readPreferenceValue:(PSSpecifier *)specifier {
+    NSString *path = @"/var/mobile/Library/Preferences/com.yourrepo.blueshare.plist";
+    NSDictionary *settings = [NSDictionary dictionaryWithContentsOfFile:path];
+    return (settings[specifier.properties[@"key"]]) ?: specifier.properties[@"default"];
+}
+
+- (void)setPreferenceValue:(id)value specifier:(PSSpecifier *)specifier {
+    NSString *path = @"/var/mobile/Library/Preferences/com.yourrepo.blueshare.plist";
+    NSMutableDictionary *settings = [NSMutableDictionary dictionaryWithContentsOfFile:path] ?: [NSMutableDictionary dictionary];
+    [settings setObject:value forKey:specifier.properties[@"key"]];
+    [settings writeToFile:path atomically:YES];
+    CFNotificationCenterPostNotification(CFNotificationCenterGetDarwinNotifyCenter(),
+                                        CFSTR("com.yourrepo.blueshare/settingschanged"),
+                                        NULL, NULL, YES);
+}
+
+// ── Value Getters for PSTitleValueCell ─────────────────────────────────────────
+- (id)authorValue {
+    return @"Sanket Yadav";
+}
+
+- (id)versionValue {
+    return @"1.0.0";
+}
+
+- (id)packageValue {
+    return @"com.yourrepo.blueshare";
+}
+
+- (id)savePathValue {
+    return @"/var/mobile/Documents/BlueShare";
 }
 
 // ── Respring action ───────────────────────────────────────────────────────────
@@ -101,7 +128,7 @@
     [alert addAction:[UIAlertAction actionWithTitle:@"Respring"
                                              style:UIAlertActionStyleDestructive
                                            handler:^(UIAlertAction *_) {
-        // Standard respring — restarts SpringBoard cleanly
+        // Standard respring — restarts SpringBoard cleanly across rootful and rootless
         pid_t pid;
         const char *argv[] = {"killall", "-9", "SpringBoard", NULL};
         posix_spawn(&pid, "/usr/bin/killall", NULL, NULL, (char *const *)argv, NULL);
@@ -110,8 +137,10 @@
     [self presentViewController:alert animated:YES completion:nil];
 }
 
+// ── Specifiers ────────────────────────────────────────────────────────────────
 - (NSArray *)specifiers {
     if (!_specifiers) {
+        NSMutableArray *specs = [NSMutableArray new];
 
         // ── Section 0: Enable toggle ─────────────────────────────────────────
         PSSpecifier *enableHeader = [PSSpecifier
@@ -119,6 +148,7 @@
             target:self set:nil get:nil detail:nil cell:PSGroupCell edit:nil];
         [enableHeader setProperty:@"Share any file with nearby iPhones over Bluetooth."
                           forKey:@"footerText"];
+        [specs addObject:enableHeader];
 
         PSSpecifier *enabled = [PSSpecifier
             preferenceSpecifierNamed:@"Enable BlueShare"
@@ -128,22 +158,23 @@
             detail:nil
               cell:PSSwitchCell
               edit:nil];
-        [enabled setProperty:@"BSEnabled"            forKey:@"key"];
+        [enabled setProperty:@"BSEnabled" forKey:@"key"];
         [enabled setProperty:@"com.yourrepo.blueshare" forKey:@"defaults"];
-        [enabled setProperty:@(YES)                   forKey:@"default"];
+        [enabled setProperty:@(YES) forKey:@"default"];
+        [specs addObject:enabled];
 
         // ── Section 1: Save location ─────────────────────────────────────────
         PSSpecifier *locHeader = [PSSpecifier
             preferenceSpecifierNamed:@"Save Location"
             target:self set:nil get:nil detail:nil cell:PSGroupCell edit:nil];
         [locHeader setProperty:@"Received files are saved here." forKey:@"footerText"];
+        [specs addObject:locHeader];
 
         PSSpecifier *savePath = [PSSpecifier
             preferenceSpecifierNamed:@"Files Folder"
-            target:self set:nil get:nil detail:nil
-              cell:PSStaticTextCell edit:nil];
-        [savePath setProperty:@"/var/mobile/Documents/BlueShare"
-                       forKey:@"staticTextValue"];
+            target:self set:nil get:@selector(savePathValue) detail:nil
+              cell:PSTitleValueCell edit:nil];
+        [specs addObject:savePath];
 
         // ── Section 2: Respring ──────────────────────────────────────────────
         PSSpecifier *respringHeader = [PSSpecifier
@@ -151,6 +182,7 @@
             target:self set:nil get:nil detail:nil cell:PSGroupCell edit:nil];
         [respringHeader setProperty:@"Respring to apply changes after toggling."
                              forKey:@"footerText"];
+        [specs addObject:respringHeader];
 
         PSSpecifier *respringBtn = [PSSpecifier
             preferenceSpecifierNamed:@"Respring Device"
@@ -160,37 +192,34 @@
             detail:nil
               cell:PSButtonCell
               edit:nil];
-        [respringBtn setButtonAction:@selector(respring)];
+        [respringBtn setProperty:NSStringFromSelector(@selector(respring)) forKey:@"action"];
+        [specs addObject:respringBtn];
 
         // ── Section 3: About ─────────────────────────────────────────────────
         PSSpecifier *aboutHeader = [PSSpecifier
             preferenceSpecifierNamed:@"About"
             target:self set:nil get:nil detail:nil cell:PSGroupCell edit:nil];
+        [specs addObject:aboutHeader];
 
         PSSpecifier *author = [PSSpecifier
             preferenceSpecifierNamed:@"Developer"
-            target:self set:nil get:nil detail:nil
-              cell:PSStaticTextCell edit:nil];
-        [author setProperty:@"Sanket Yadav" forKey:@"staticTextValue"];
+            target:self set:nil get:@selector(authorValue) detail:nil
+              cell:PSTitleValueCell edit:nil];
+        [specs addObject:author];
 
         PSSpecifier *version = [PSSpecifier
             preferenceSpecifierNamed:@"Version"
-            target:self set:nil get:nil detail:nil
-              cell:PSStaticTextCell edit:nil];
-        [version setProperty:@"1.0.0" forKey:@"staticTextValue"];
+            target:self set:nil get:@selector(versionValue) detail:nil
+              cell:PSTitleValueCell edit:nil];
+        [specs addObject:version];
 
         PSSpecifier *package = [PSSpecifier
             preferenceSpecifierNamed:@"Package"
-            target:self set:nil get:nil detail:nil
-              cell:PSStaticTextCell edit:nil];
-        [package setProperty:@"com.yourrepo.blueshare" forKey:@"staticTextValue"];
+            target:self set:nil get:@selector(packageValue) detail:nil
+              cell:PSTitleValueCell edit:nil];
+        [specs addObject:package];
 
-        _specifiers = [@[
-            enableHeader,  enabled,
-            locHeader,     savePath,
-            respringHeader, respringBtn,
-            aboutHeader,   author, version, package,
-        ] mutableCopy];
+        _specifiers = specs;
     }
     return _specifiers;
 }
