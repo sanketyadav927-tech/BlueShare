@@ -9,43 +9,89 @@ on:
 
 jobs:
   build:
-    name: Build with Theos
+    name: Build BlueShare
     runs-on: macos-latest
 
+    env:
+      THEOS: /opt/theos
+
     steps:
-      # ── 1. Checkout ─────────────────────────────────────────────────────────
-      - name: Checkout source
+      # ── 1. Checkout ──────────────────────────────────────────────────────────
+      - name: Checkout
         uses: actions/checkout@v4
 
-      # ── 2. Official Theos setup action ──────────────────────────────────────
-      # This handles EVERYTHING: installs Theos, downloads the correct iOS SDK,
-      # sets up ldid, and exports $THEOS — no manual SDK URL needed.
-      - name: Setup Theos
-        uses: theos/theos-action@v2
-        with:
-          sdk-version: '16.5'      # iOS SDK version to download
-          theos-version: 'latest'  # always use latest Theos
-
-      # ── 3. Build the .deb package ────────────────────────────────────────────
-      - name: Build BlueShare
+      # ── 2. Pre-create dir with correct permissions ────────────────────────────
+      - name: Setup /opt/theos directory
         run: |
+          sudo mkdir -p /opt/theos/sdks
+          sudo chown -R "$USER" /opt/theos
+
+      # ── 3. Cache Theos clone ──────────────────────────────────────────────────
+      - name: Cache Theos
+        id: cache-theos
+        uses: actions/cache@v4
+        with:
+          path: /opt/theos
+          key: theos-clone-${{ runner.arch }}-v5
+
+      # ── 4. Clone Theos directly (skip install script entirely) ────────────────
+      - name: Clone Theos
+        if: steps.cache-theos.outputs.cache-hit != 'true'
+        run: |
+          git clone --recursive \
+            https://github.com/theos/theos.git \
+            /opt/theos
+
+      # ── 5. Download iOS SDK via gh CLI (pre-installed, handles auth + URLs) ───
+      #   gh release download is the most reliable way — no broken redirect issues.
+      - name: Download iOS SDK
+        if: steps.cache-theos.outputs.cache-hit != 'true'
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # List available releases so we pick the right filename
+          gh release list --repo theos/sdks --limit 5
+
+          # Download the latest iOS SDK from the theos/sdks repo
+          gh release download \
+            --repo theos/sdks \
+            --pattern "iPhoneOS*.sdk.tar.xz" \
+            --dir /tmp/sdks/
+
+          # Extract whichever SDK was downloaded
+          for f in /tmp/sdks/*.tar.xz; do
+            echo "Extracting $f..."
+            tar -xJf "$f" -C /opt/theos/sdks/
+          done
+
+          echo "SDKs installed:"
+          ls /opt/theos/sdks/
+
+      # ── 6. Install ldid (code signing, required by Theos) ────────────────────
+      - name: Install ldid
+        run: brew install ldid
+
+      # ── 7. Build the .deb ────────────────────────────────────────────────────
+      - name: Build
+        run: |
+          export PATH="$THEOS/bin:$PATH"
           make clean
           make package FINALPACKAGE=1
 
-      # ── 4. List output ──────────────────────────────────────────────────────
-      - name: Show built packages
+      # ── 8. Show output ───────────────────────────────────────────────────────
+      - name: List packages
         run: ls -lh packages/
 
-      # ── 5. Upload .deb as downloadable artifact ─────────────────────────────
-      - name: Upload .deb
+      # ── 9. Upload .deb as artifact ───────────────────────────────────────────
+      - name: Upload .deb artifact
         uses: actions/upload-artifact@v4
         with:
           name: BlueShare-deb
           path: packages/*.deb
           retention-days: 30
 
-      # ── 6. Create GitHub Release on version tags (e.g. git tag v1.0.0) ──────
-      - name: Create GitHub Release
+      # ── 10. GitHub Release (only on git tags like v1.0.0) ────────────────────
+      - name: Create Release
         if: startsWith(github.ref, 'refs/tags/v')
         uses: softprops/action-gh-release@v2
         with:
@@ -55,7 +101,7 @@ jobs:
             ## BlueShare ${{ github.ref_name }}
             **by Sanket Yadav**
 
-            ### Install
+            ### Install on your iPhone
             ```bash
             scp BlueShare*.deb root@<device-ip>:/var/root/
             ssh root@<device-ip> "dpkg -i /var/root/BlueShare*.deb && killall SpringBoard"
