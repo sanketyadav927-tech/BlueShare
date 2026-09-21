@@ -46,13 +46,7 @@ static BOOL bsEnabled(void) {
 
 // ── Constructor ───────────────────────────────────────────────────────────────
 %ctor {
-    // Start the peripheral (receiver) immediately so the device can be found
-    // by other BlueShare senders even without opening any app.
-    // The daemon handles this when SpringBoard isn't the active process,
-    // but having it here ensures in-app receipt works too.
+    // Start advertising so this device is discoverable by other BlueShare senders.
+    // The daemon handles incoming transfers in the background.
     [[BSTransferManager sharedManager] startAdvertising];
-
-    // Set up delegate to handle incoming file requests inside SpringBoard
-    // (The daemon duplicates this for background receipt.)
-    [BSTransferManager sharedManager].delegate = (id)[[NSObject alloc] init];
 }

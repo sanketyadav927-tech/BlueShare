@@ -96,6 +96,11 @@
     return self;
 }
 
+// Required override: satisfies the superclass designated initializer chain
+- (instancetype)initWithNibName:(NSString *)nibNameOrNil bundle:(NSBundle *)nibBundleOrNil {
+    return [self initWithFileURLs:@[]];
+}
+
 // ── Lifecycle ─────────────────────────────────────────────────────────────────
 
 - (void)viewDidLoad {
