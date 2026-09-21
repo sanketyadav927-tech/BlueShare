@@ -133,7 +133,7 @@
 
     // Empty state label
     self.emptyLabel = [UILabel new];
-    self.emptyLabel.text = @"Scanning for nearby devices…\n\nMake sure the other iPhone has\nBlueShare installed and open.";
+    self.emptyLabel.text = @"Scanning for nearby Bluetooth devices…\n\nMake sure Bluetooth is turned on and discoverable on the other device.";
     self.emptyLabel.numberOfLines = 0;
     self.emptyLabel.textAlignment = NSTextAlignmentCenter;
     self.emptyLabel.textColor = [UIColor secondaryLabelColor];
@@ -175,7 +175,16 @@
     BSPeer *peer = self.peers[ip.row];
 
     cell.textLabel.text = peer.displayName;
-    cell.imageView.image = [UIImage systemImageNamed:@"iphone"];
+    if ([peer.displayName localizedCaseInsensitiveContainsString:@"android"] ||
+        [peer.displayName localizedCaseInsensitiveContainsString:@"samsung"] ||
+        [peer.displayName localizedCaseInsensitiveContainsString:@"pixel"] ||
+        [peer.displayName localizedCaseInsensitiveContainsString:@"xiaomi"] ||
+        [peer.displayName localizedCaseInsensitiveContainsString:@"redmi"] ||
+        [peer.displayName localizedCaseInsensitiveContainsString:@"oneplus"]) {
+        cell.imageView.image = [UIImage systemImageNamed:@"candybarphone"];
+    } else {
+        cell.imageView.image = [UIImage systemImageNamed:@"iphone"];
+    }
     cell.accessoryType = UITableViewCellAccessoryDisclosureIndicator;
     return cell;
 }

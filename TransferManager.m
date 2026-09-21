@@ -103,13 +103,24 @@ static const NSUInteger kChunkSize  = 512;   // bytes per BLE write packet
 - (instancetype)init {
     if ((self = [super init])) {
         _discoveredPeers = [NSMutableArray new];
-        // Queues
-        dispatch_queue_t cq = dispatch_queue_create("com.blueshare.central",  DISPATCH_QUEUE_SERIAL);
-        dispatch_queue_t pq = dispatch_queue_create("com.blueshare.peripheral",DISPATCH_QUEUE_SERIAL);
-        _central    = [[CBCentralManager    alloc] initWithDelegate:self queue:cq];
-        _peripheral = [[CBPeripheralManager alloc] initWithDelegate:self queue:pq];
     }
     return self;
+}
+
+- (CBCentralManager *)central {
+    if (!_central) {
+        dispatch_queue_t cq = dispatch_queue_create("com.blueshare.central", DISPATCH_QUEUE_SERIAL);
+        _central = [[CBCentralManager alloc] initWithDelegate:self queue:cq];
+    }
+    return _central;
+}
+
+- (CBPeripheralManager *)peripheral {
+    if (!_peripheral) {
+        dispatch_queue_t pq = dispatch_queue_create("com.blueshare.peripheral", DISPATCH_QUEUE_SERIAL);
+        _peripheral = [[CBPeripheralManager alloc] initWithDelegate:self queue:pq];
+    }
+    return _peripheral;
 }
 
 // ── SENDER ────────────────────────────────────────────────────────────────────
@@ -117,8 +128,8 @@ static const NSUInteger kChunkSize  = 512;   // bytes per BLE write packet
 - (void)startScanningForPeers {
     if (self.central.state != CBManagerStatePoweredOn) return;
     [self.discoveredPeers removeAllObjects];
-    CBUUID *svcUUID = [CBUUID UUIDWithString:kBSServiceUUID];
-    [self.central scanForPeripheralsWithServices:@[svcUUID]
+    // Scan for all nearby Bluetooth devices so Android and other devices are discovered
+    [self.central scanForPeripheralsWithServices:nil
                                          options:@{CBCentralManagerScanOptionAllowDuplicatesKey: @NO}];
 }
 

@@ -15,7 +15,7 @@
 // ── UIActivity identity ───────────────────────────────────────────────────────
 
 + (UIActivityCategory)activityCategory {
-    return UIActivityCategoryShare;
+    return UIActivityCategoryAction;
 }
 
 - (NSString *)activityType {
@@ -29,7 +29,7 @@
 - (UIImage *)activityImage {
     // SF Symbol available iOS 13+
     UIImageSymbolConfiguration *cfg = [UIImageSymbolConfiguration
-        configurationWithPointSize:28 weight:UIImageSymbolWeightMedium];
+        configurationWithPointSize:24 weight:UIImageSymbolWeightRegular];
     return [UIImage systemImageNamed:@"antenna.radiowaves.left.and.right"
                    withConfiguration:cfg];
 }
@@ -37,7 +37,7 @@
 // ── Supported item types ──────────────────────────────────────────────────────
 
 - (BOOL)canPerformWithActivityItems:(NSArray *)activityItems {
-    return (activityItems.count > 0);
+    return YES;
 }
 
 - (void)prepareWithActivityItems:(NSArray *)activityItems {
