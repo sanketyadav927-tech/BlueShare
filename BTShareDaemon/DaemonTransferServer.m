@@ -3,7 +3,7 @@
 // local UNUserNotifications so the user can Accept/Decline incoming transfers.
 
 #import "DaemonTransferServer.h"
-#import "../TransferManager.h"
+#import "TransferManager.h"
 #import <UserNotifications/UserNotifications.h>
 
 // Notification category & action identifiers

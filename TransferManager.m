@@ -2,6 +2,7 @@
 // Full CoreBluetooth implementation for BlueShare peer-to-peer file transfer.
 
 #import "TransferManager.h"
+#import <UIKit/UIKit.h>
 #import <UserNotifications/UserNotifications.h>
 
 // ── UUIDs ────────────────────────────────────────────────────────────────────

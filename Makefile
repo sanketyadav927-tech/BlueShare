@@ -21,9 +21,9 @@ include $(THEOS_MAKE_PATH)/tweak.mk
 
 # ── Background Daemon ────────────────────────────────────────────────────────
 TOOL_NAME := BTShareDaemon
-BTShareDaemon_FILES      := BTShareDaemon/main.m BTShareDaemon/DaemonTransferServer.m
-BTShareDaemon_FRAMEWORKS := CoreBluetooth Foundation UserNotifications
-BTShareDaemon_CFLAGS     := -fobjc-arc
+BTShareDaemon_FILES      := BTShareDaemon/main.m BTShareDaemon/DaemonTransferServer.m TransferManager.m
+BTShareDaemon_FRAMEWORKS := CoreBluetooth Foundation UserNotifications UIKit
+BTShareDaemon_CFLAGS     := -fobjc-arc -I$(THEOS_PROJECT_DIR)
 BTShareDaemon_INSTALL_PATH := /usr/libexec
 
 include $(THEOS_MAKE_PATH)/tool.mk
