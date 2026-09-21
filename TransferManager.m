@@ -68,6 +68,7 @@ static const NSUInteger kChunkSize  = 512;   // bytes per BLE write packet
 @property (nonatomic, strong) CBCharacteristic          *dataChar;
 @property (nonatomic, strong) CBCharacteristic          *ackChar;
 @property (nonatomic, strong) CBCharacteristic          *controlChar;
+@property (nonatomic) BOOL                               isScanningRequested;
 
 // Sender state
 @property (nonatomic, strong) NSData                    *fileData;
@@ -126,15 +127,24 @@ static const NSUInteger kChunkSize  = 512;   // bytes per BLE write packet
 // ── SENDER ────────────────────────────────────────────────────────────────────
 
 - (void)startScanningForPeers {
-    if (self.central.state != CBManagerStatePoweredOn) return;
+    self.isScanningRequested = YES;
     [self.discoveredPeers removeAllObjects];
-    // Scan for all nearby Bluetooth devices so Android and other devices are discovered
-    [self.central scanForPeripheralsWithServices:nil
-                                         options:@{CBCentralManagerScanOptionAllowDuplicatesKey: @NO}];
+
+    CBCentralManager *central = self.central;
+    if (central.state == CBManagerStatePoweredOn) {
+        NSLog(@"[BlueShare] Central already powered on. Starting scan now.");
+        [central scanForPeripheralsWithServices:nil
+                                        options:@{CBCentralManagerScanOptionAllowDuplicatesKey: @NO}];
+    } else {
+        NSLog(@"[BlueShare] Central state is %ld. Scan will auto-start once Bluetooth is powered on.", (long)central.state);
+    }
 }
 
 - (void)stopScanning {
-    [self.central stopScan];
+    self.isScanningRequested = NO;
+    if (_central) {
+        [_central stopScan];
+    }
 }
 
 - (void)sendFileAtURL:(NSURL *)fileURL toPeer:(CBPeripheral *)peer {
@@ -162,8 +172,20 @@ static const NSUInteger kChunkSize  = 512;   // bytes per BLE write packet
 // ── CBCentralManagerDelegate ──────────────────────────────────────────────────
 
 - (void)centralManagerDidUpdateState:(CBCentralManager *)central {
+    NSLog(@"[BlueShare] Central state updated: %ld", (long)central.state);
+
+    if ([self.delegate respondsToSelector:@selector(transferManager:didUpdateBluetoothState:)]) {
+        dispatch_async(dispatch_get_main_queue(), ^{
+            [self.delegate transferManager:self didUpdateBluetoothState:central.state];
+        });
+    }
+
     if (central.state == CBManagerStatePoweredOn) {
-        NSLog(@"[BlueShare] Central BT powered on.");
+        if (self.isScanningRequested) {
+            NSLog(@"[BlueShare] Central powered on. Initiating Bluetooth scan now!");
+            [central scanForPeripheralsWithServices:nil
+                                            options:@{CBCentralManagerScanOptionAllowDuplicatesKey: @NO}];
+        }
     }
 }
 

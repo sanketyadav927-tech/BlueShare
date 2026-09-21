@@ -142,9 +142,22 @@
 
     [self.tableView registerClass:[UITableViewCell class] forCellReuseIdentifier:@"PeerCell"];
 
+    // Pull to refresh
+    UIRefreshControl *rc = [UIRefreshControl new];
+    [rc addTarget:self action:@selector(didPullToRefresh:) forControlEvents:UIControlEventValueChanged];
+    self.tableView.refreshControl = rc;
+
     // Start scanning
     [BSTransferManager sharedManager].delegate = self;
     [[BSTransferManager sharedManager] startScanningForPeers];
+}
+
+- (void)didPullToRefresh:(UIRefreshControl *)rc {
+    [self.peers removeAllObjects];
+    [self.tableView reloadData];
+    [[BSTransferManager sharedManager] stopScanning];
+    [[BSTransferManager sharedManager] startScanningForPeers];
+    [rc endRefreshing];
 }
 
 - (void)viewDidDisappear:(BOOL)animated {
@@ -159,6 +172,26 @@
     [self dismissViewControllerAnimated:YES completion:^{
         if (self.completionHandler) self.completionHandler(NO);
     }];
+}
+
+// ── BSTransferManagerDelegate (sender side) ───────────────────────────────────
+
+- (void)transferManager:(id)mgr didUpdateBluetoothState:(CBManagerState)state {
+    dispatch_async(dispatch_get_main_queue(), ^{
+        if (state == CBManagerStatePoweredOff) {
+            self.emptyLabel.text = @"Bluetooth is Turned Off ⚠️\n\nPlease turn on Bluetooth in Settings or Control Center to scan.";
+            [self.spinner stopAnimating];
+        } else if (state == CBManagerStateUnauthorized) {
+            self.emptyLabel.text = @"Bluetooth Unauthorized ⚠️\n\nPlease check Bluetooth permissions in Settings.";
+            [self.spinner stopAnimating];
+        } else if (state == CBManagerStateUnsupported) {
+            self.emptyLabel.text = @"Bluetooth is not supported on this device.";
+            [self.spinner stopAnimating];
+        } else if (state == CBManagerStatePoweredOn) {
+            self.emptyLabel.text = @"Scanning for nearby Bluetooth devices…\n\nMake sure Bluetooth is turned on and discoverable on the other device.";
+            [self.spinner startAnimating];
+        }
+    });
 }
 
 // ── UITableViewDataSource ─────────────────────────────────────────────────────
