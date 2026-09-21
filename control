@@ -1,0 +1,9 @@
+Package: com.yourrepo.blueshare
+Name: BlueShare
+Version: 1.0.0
+Architecture: iphoneos-arm
+Description: Share files with nearby iPhones via Bluetooth — no Wi-Fi, no internet needed.
+Maintainer: Your Name <you@example.com>
+Author: Your Name <you@example.com>
+Section: Tweaks
+Depends: mobilesubstrate, preferenceloader

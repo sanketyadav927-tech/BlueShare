@@ -1,0 +1,14 @@
+# Theos build output
+.theos/
+packages/
+obj/
+
+# macOS
+.DS_Store
+
+# Xcode
+*.xcuserstate
+*.xcworkspace
+
+# Logs
+*.log
