@@ -75,9 +75,20 @@
         initWithRootViewController:picker];
     nav.modalPresentationStyle = UIModalPresentationFormSheet;
 
-    // Find the key window's root view controller to present from
-    UIViewController *rootVC = [UIApplication sharedApplication]
-        .connectedScenes.allObjects.firstObject;  // simplified — Tweak.xm does this properly
+    // Find the root view controller from the active window scene
+    UIViewController *rootVC = nil;
+    for (UIScene *scene in [UIApplication sharedApplication].connectedScenes) {
+        if ([scene isKindOfClass:[UIWindowScene class]]) {
+            UIWindowScene *windowScene = (UIWindowScene *)scene;
+            for (UIWindow *window in windowScene.windows) {
+                if (window.isKeyWindow) {
+                    rootVC = window.rootViewController;
+                    break;
+                }
+            }
+        }
+        if (rootVC) break;
+    }
     [rootVC presentViewController:nav animated:YES completion:nil];
 }
 
