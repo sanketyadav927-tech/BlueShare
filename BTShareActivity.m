@@ -72,10 +72,8 @@ static NSURL *exportAssetToFile(PHAsset *asset) {
     } @catch (NSException *_) {}
 
     // Tier 2: PHAssetResourceManager (Official Apple Photos framework file exporter)
-    Class PHAssetResourceClass = NSClassFromString(@"PHAssetResource");
-    Class PHAssetResourceManagerClass = NSClassFromString(@"PHAssetResourceManager");
-    if (PHAssetResourceClass && PHAssetResourceManagerClass) {
-        NSArray *resources = [PHAssetResourceClass assetResourcesForAsset:asset];
+    if (NSClassFromString(@"PHAssetResource") && NSClassFromString(@"PHAssetResourceManager")) {
+        NSArray<PHAssetResource *> *resources = [PHAssetResource assetResourcesForAsset:asset];
         PHAssetResource *targetRes = nil;
         for (PHAssetResource *r in resources) {
             if (r.type == PHAssetResourceTypePhoto ||
@@ -103,10 +101,10 @@ static NSURL *exportAssetToFile(PHAsset *asset) {
 
             dispatch_semaphore_t rSem = dispatch_semaphore_create(0);
             __block BOOL rSuccess = NO;
-            [[PHAssetResourceManagerClass defaultManager] writeDataForAssetResource:targetRes
-                                                                             toFile:destURL
-                                                                            options:rOpts
-                                                                  completionHandler:^(NSError * _Nullable error) {
+            [[PHAssetResourceManager defaultManager] writeDataForAssetResource:targetRes
+                                                                        toFile:destURL
+                                                                       options:rOpts
+                                                             completionHandler:^(NSError * _Nullable error) {
                 if (!error && [[NSFileManager defaultManager] fileExistsAtPath:destPath]) {
                     rSuccess = YES;
                 }
