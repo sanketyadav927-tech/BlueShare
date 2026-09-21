@@ -13,7 +13,7 @@
 // ── Embedded HTTP Server for Direct Android Transfer ─────────────────────────
 @interface BSSimpleHTTPServer : NSObject
 + (instancetype)sharedServer;
-- (NSString *)startWithFileURL:(NSURL *)fileURL;
+- (NSString *)startWithFileURLs:(NSArray<NSURL *> *)fileURLs errorReason:(NSString **)outError;
 - (void)stop;
 - (NSString *)localIPAddress;
 - (NSString *)connectionType;
@@ -22,9 +22,7 @@
 @implementation BSSimpleHTTPServer {
     int _serverFd;
     BOOL _running;
-    NSData *_fileData;
-    NSString *_mimeType;
-    NSString *_fileName;
+    NSMutableArray<NSDictionary *> *_fileItems;
 }
 
 + (instancetype)sharedServer {
@@ -43,10 +41,10 @@
         while (temp_addr != NULL) {
             if (temp_addr->ifa_addr && temp_addr->ifa_addr->sa_family == AF_INET) {
                 NSString *name = [NSString stringWithUTF8String:temp_addr->ifa_name];
-                if ([name hasPrefix:@"bridge"] || [name isEqualToString:@"ap0"]) {
+                if ([name hasPrefix:@"bridge"]) {
                     type = @"Personal Hotspot";
                     break;
-                } else if ([name isEqualToString:@"en0"]) {
+                } else if ([name hasPrefix:@"en"]) {
                     type = @"Wi-Fi";
                 }
             }
@@ -66,14 +64,16 @@
         while (temp_addr != NULL) {
             if (temp_addr->ifa_addr && temp_addr->ifa_addr->sa_family == AF_INET) {
                 NSString *name = [NSString stringWithUTF8String:temp_addr->ifa_name];
+                // ONLY accept Personal Hotspot (bridge100, bridge101) or Wi-Fi (en0, en1).
+                // Do NOT include ap0 (AWDL/AirDrop), pdp_ip (Cellular), or lo0 (Loopback).
                 if ([name isEqualToString:@"bridge100"] || [name isEqualToString:@"bridge101"] ||
-                    [name isEqualToString:@"en0"] || [name isEqualToString:@"en1"] || [name isEqualToString:@"ap0"]) {
+                    [name isEqualToString:@"en0"] || [name isEqualToString:@"en1"]) {
                     struct sockaddr_in *saddr = (struct sockaddr_in *)temp_addr->ifa_addr;
                     NSString *ip = [NSString stringWithUTF8String:inet_ntoa(saddr->sin_addr)];
                     if (ip && ![ip isEqualToString:@"127.0.0.1"] && ![ip hasPrefix:@"169.254."]) {
                         if ([name hasPrefix:@"bridge"]) {
                             address = ip;
-                            break;
+                            break; // Prioritize Personal Hotspot
                         } else if (!address) {
                             address = ip;
                         }
@@ -109,30 +109,60 @@
     return @"application/octet-stream";
 }
 
-- (NSString *)startWithFileURL:(NSURL *)fileURL {
+- (NSString *)startWithFileURLs:(NSArray<NSURL *> *)fileURLs errorReason:(NSString **)outError {
     [self stop];
 
     NSString *ip = [self localIPAddress];
     if (!ip) {
-        NSLog(@"[BlueShare] No local IP found.");
+        if (outError) {
+            *outError = @"No active Wi-Fi or Personal Hotspot connection detected.\n\nPlease turn on 'Personal Hotspot' in iPhone Settings (or connect both devices to the same Wi-Fi).";
+        }
         return nil;
     }
 
-    _fileData = [NSData dataWithContentsOfURL:fileURL];
-    if (!_fileData || _fileData.length == 0) {
-        NSString *sharedPath = @"/var/mobile/Documents/BlueShare/shared_photo.jpg";
-        _fileData = [NSData dataWithContentsOfFile:sharedPath];
-    }
-    if (!_fileData || _fileData.length == 0) {
-        NSLog(@"[BlueShare] Could not read file data for URL: %@", fileURL);
+    if (!fileURLs || fileURLs.count == 0) {
+        if (outError) {
+            *outError = @"Could not extract the selected photo or file.\n\nPlease ensure the photo is fully downloaded if stored in iCloud.";
+        }
         return nil;
     }
 
-    _fileName = fileURL.lastPathComponent ?: @"file";
-    _mimeType = [self mimeTypeForExtension:_fileName.pathExtension];
+    _fileItems = [NSMutableArray new];
+    for (NSUInteger idx = 0; idx < fileURLs.count; idx++) {
+        NSURL *u = fileURLs[idx];
+        NSError *readErr = nil;
+        NSData *data = [NSData dataWithContentsOfURL:u options:NSDataReadingMappedIfSafe error:&readErr];
+        if (!data || data.length == 0) {
+            data = [NSData dataWithContentsOfFile:u.path options:0 error:&readErr];
+        }
+        if (data && data.length > 0) {
+            NSString *fname = u.lastPathComponent ?: [NSString stringWithFormat:@"photo_%lu.jpg", (unsigned long)idx];
+            NSString *mime = [self mimeTypeForExtension:fname.pathExtension];
+            [_fileItems addObject:@{
+                @"url": u,
+                @"name": fname,
+                @"mime": mime,
+                @"data": data,
+                @"size": @(data.length),
+                @"index": @(idx)
+            }];
+        }
+    }
+
+    if (_fileItems.count == 0) {
+        if (outError) {
+            *outError = [NSString stringWithFormat:@"Unable to read file data from:\n%@", fileURLs.firstObject.path ?: @"unknown path"];
+        }
+        return nil;
+    }
 
     _serverFd = socket(AF_INET, SOCK_STREAM, 0);
-    if (_serverFd < 0) return nil;
+    if (_serverFd < 0) {
+        if (outError) {
+            *outError = [NSString stringWithFormat:@"socket() creation failed (errno %d: %s)", errno, strerror(errno)];
+        }
+        return nil;
+    }
 
     int opt = 1;
     setsockopt(_serverFd, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt));
@@ -143,6 +173,7 @@
     int ports[] = {8765, 8766, 8888, 8080, 9090, 0};
     int boundPort = 0;
     BOOL bound = NO;
+    int lastErrno = 0;
     for (int i = 0; i < 6; i++) {
         int p = ports[i];
         struct sockaddr_in serv_addr;
@@ -161,18 +192,27 @@
             }
             bound = YES;
             break;
+        } else {
+            lastErrno = errno;
         }
     }
 
     if (!bound) {
         close(_serverFd);
         _serverFd = 0;
+        if (outError) {
+            *outError = [NSString stringWithFormat:@"bind() failed on all candidate ports (errno %d: %s)", lastErrno, strerror(lastErrno)];
+        }
         return nil;
     }
 
     if (listen(_serverFd, 10) < 0) {
+        int lErr = errno;
         close(_serverFd);
         _serverFd = 0;
+        if (outError) {
+            *outError = [NSString stringWithFormat:@"listen() failed (errno %d: %s)", lErr, strerror(lErr)];
+        }
         return nil;
     }
 
@@ -197,35 +237,107 @@
             NSString *req = [NSString stringWithUTF8String:buffer] ?: @"";
 
             if ([req containsString:@"GET /download"] || [req containsString:@"GET /raw"]) {
+                NSDictionary *item = self->_fileItems.firstObject;
+                NSRange idRange = [req rangeOfString:@"id="];
+                if (idRange.location != NSNotFound) {
+                    NSString *tail = [req substringFromIndex:idRange.location + 3];
+                    NSScanner *scan = [NSScanner scannerWithString:tail];
+                    NSInteger reqIdx = 0;
+                    if ([scan scanInteger:&reqIdx] && reqIdx >= 0 && reqIdx < (NSInteger)self->_fileItems.count) {
+                        item = self->_fileItems[reqIdx];
+                    }
+                }
+
+                NSData *data = item[@"data"];
+                NSString *mime = item[@"mime"];
+                NSString *name = item[@"name"];
+                BOOL isDownload = [req containsString:@"GET /download"];
+
                 NSString *headers = [NSString stringWithFormat:
                     @"HTTP/1.1 200 OK\r\n"
                     @"Content-Type: %@\r\n"
                     @"Content-Length: %lu\r\n"
-                    @"Content-Disposition: attachment; filename=\"%@\"\r\n"
+                    @"%@"
                     @"Access-Control-Allow-Origin: *\r\n"
                     @"Connection: close\r\n\r\n",
-                    self->_mimeType, (unsigned long)self->_fileData.length, self->_fileName];
+                    mime, (unsigned long)data.length,
+                    isDownload ? [NSString stringWithFormat:@"Content-Disposition: attachment; filename=\"%@\"\r\n", name] : @""];
                 NSData *hdrData = [headers dataUsingEncoding:NSUTF8StringEncoding];
                 write(clientFd, hdrData.bytes, hdrData.length);
-                write(clientFd, self->_fileData.bytes, self->_fileData.length);
+                write(clientFd, data.bytes, data.length);
             } else {
-                // Generate preview block based on MIME type
-                NSString *previewHTML = @"";
-                NSString *btnText = @"📥 Download File to Android";
-                NSString *fileSizeStr = [NSByteCountFormatter stringFromByteCount:self->_fileData.length countStyle:NSByteCountFormatterCountStyleFile];
+                // Generate preview block based on files
+                NSMutableString *bodyContent = [NSMutableString new];
+                NSString *autoScript = @"";
 
-                if ([self->_mimeType hasPrefix:@"image/"]) {
-                    previewHTML = @"<img src=\"/raw\" alt=\"Photo\" style=\"width:100%;max-height:320px;object-fit:cover;border-radius:14px;margin-bottom:18px;\">";
-                    btnText = @"📥 Save to Android Gallery";
-                } else if ([self->_mimeType hasPrefix:@"video/"]) {
-                    previewHTML = @"<video controls autoplay muted playsinline src=\"/raw\" style=\"width:100%;max-height:300px;border-radius:14px;margin-bottom:18px;\"></video>";
-                    btnText = @"📥 Save Video to Gallery";
-                } else if ([self->_mimeType hasPrefix:@"audio/"]) {
-                    previewHTML = @"<div style=\"font-size:48px;margin:12px 0;\">🎵</div><audio controls src=\"/raw\" style=\"width:100%;margin-bottom:18px;\"></audio>";
-                    btnText = @"📥 Download Audio File";
+                if (self->_fileItems.count == 1) {
+                    NSDictionary *item = self->_fileItems.firstObject;
+                    NSString *name = item[@"name"];
+                    NSString *mime = item[@"mime"];
+                    NSData *data = item[@"data"];
+                    NSString *fileSizeStr = [NSByteCountFormatter stringFromByteCount:data.length countStyle:NSByteCountFormatterCountStyleFile];
+
+                    NSString *previewHTML = @"";
+                    NSString *btnText = @"📥 Download to Android";
+
+                    if ([mime hasPrefix:@"image/"]) {
+                        previewHTML = @"<img src=\"/raw\" alt=\"Photo\" style=\"width:100%;max-height:340px;object-fit:cover;border-radius:14px;margin-bottom:18px;\">";
+                        btnText = @"📥 Save to Android Gallery";
+                    } else if ([mime hasPrefix:@"video/"]) {
+                        previewHTML = @"<video controls autoplay muted playsinline src=\"/raw\" style=\"width:100%;max-height:300px;border-radius:14px;margin-bottom:18px;\"></video>";
+                        btnText = @"📥 Save Video to Gallery";
+                    } else if ([mime hasPrefix:@"audio/"]) {
+                        previewHTML = @"<div style=\"font-size:54px;margin:12px 0;\">🎵</div><audio controls src=\"/raw\" style=\"width:100%;margin-bottom:18px;\"></audio>";
+                        btnText = @"📥 Download Audio File";
+                    } else {
+                        previewHTML = [NSString stringWithFormat:@"<div style=\"font-size:54px;margin:14px 0;\">📄</div><h3 style=\"margin:0 0 6px;word-break:break-all;\">%@</h3><p style=\"color:#94a3b8;font-size:14px;margin-bottom:18px;\">Size: %@</p>", name, fileSizeStr];
+                        btnText = [NSString stringWithFormat:@"📥 Download %@", name];
+                    }
+
+                    [bodyContent appendFormat:
+                        @"%@"
+                        @"<a href=\"/download\" class=\"btn dl-btn\" download=\"%@\">%@</a>"
+                        @"<p class=\"hint\">✅ Saves directly to your Android device storage and appears in your Gallery / Downloads instantly.</p>",
+                        previewHTML, name, btnText];
+
+                    autoScript = [NSString stringWithFormat:
+                        @"setTimeout(function(){"
+                        @"  var a=document.createElement('a');a.href='/download';a.download='%@';document.body.appendChild(a);a.click();"
+                        @"},600);", name];
                 } else {
-                    previewHTML = [NSString stringWithFormat:@"<div style=\"font-size:52px;margin:14px 0;\">📄</div><h3 style=\"margin:0 0 6px;word-break:break-all;\">%@</h3><p style=\"color:#94a3b8;font-size:14px;margin-bottom:18px;\">Size: %@</p>", self->_fileName, fileSizeStr];
-                    btnText = [NSString stringWithFormat:@"📥 Download %@", self->_fileName];
+                    // Multiple files
+                    [bodyContent appendFormat:@"<h3 style=\"margin:0 0 16px;\">Received %lu Items</h3>", (unsigned long)self->_fileItems.count];
+                    for (NSDictionary *item in self->_fileItems) {
+                        NSUInteger idx = [item[@"index"] unsignedIntegerValue];
+                        NSString *name = item[@"name"];
+                        NSString *mime = item[@"mime"];
+                        NSData *data = item[@"data"];
+                        NSString *sizeStr = [NSByteCountFormatter stringFromByteCount:data.length countStyle:NSByteCountFormatterCountStyleFile];
+
+                        NSString *icon = [mime hasPrefix:@"image/"] ? @"🖼️" : ([mime hasPrefix:@"video/"] ? @"🎬" : @"📄");
+                        [bodyContent appendFormat:
+                            @"<div style=\"background:#334155;border-radius:12px;padding:12px;margin-bottom:10px;text-align:left;display:flex;align-items:center;justify-content:space-between;\">"
+                            @"  <div style=\"overflow:hidden;padding-right:10px;\">"
+                            @"    <div style=\"font-size:14px;font-weight:600;white-space:nowrap;text-overflow:ellipsis;overflow:hidden;\">%@ %@</div>"
+                            @"    <div style=\"font-size:12px;color:#94a3b8;\">%@</div>"
+                            @"  </div>"
+                            @"  <a href=\"/download?id=%lu\" class=\"btn dl-btn\" download=\"%@\" style=\"width:auto;padding:8px 16px;font-size:13px;\">Save</a>"
+                            @"</div>",
+                            icon, name, sizeStr, (unsigned long)idx, name];
+                    }
+
+                    [bodyContent appendString:
+                        @"<button onclick=\"downloadAll()\" class=\"btn\" style=\"margin-top:14px;cursor:pointer;\">📥 Save All to Android</button>"
+                        @"<p class=\"hint\">Files save directly to Android Gallery and Downloads folder.</p>"];
+
+                    autoScript =
+                        @"function downloadAll(){"
+                        @"  var links=document.querySelectorAll('.dl-btn');"
+                        @"  links.forEach(function(l,i){"
+                        @"    setTimeout(function(){ l.click(); }, i*600);"
+                        @"  });"
+                        @"}"
+                        @"setTimeout(downloadAll, 800);";
                 }
 
                 NSString *html = [NSString stringWithFormat:
@@ -235,7 +347,7 @@
                     @".card{background:#1e293b;border-radius:22px;padding:24px;max-width:380px;margin:20px auto;box-shadow:0 10px 30px rgba(0,0,0,0.5)}"
                     @".badge{background:#10b981;color:#fff;font-weight:700;font-size:12px;padding:6px 14px;border-radius:30px;display:inline-block;margin-bottom:14px}"
                     @"h2{margin:0 0 16px;font-size:20px;font-weight:700}"
-                    @".btn{display:block;width:100%%;box-sizing:border-box;background:#2563eb;color:#fff;text-decoration:none;padding:16px 0;border-radius:12px;font-weight:700;font-size:17px}"
+                    @".btn{display:block;width:100%%;box-sizing:border-box;background:#2563eb;color:#fff;text-decoration:none;padding:16px 0;border-radius:12px;font-weight:700;font-size:16px;border:none}"
                     @".btn:active{background:#1d4ed8}"
                     @".hint{color:#94a3b8;font-size:13px;margin-top:14px;line-height:1.4}"
                     @"</style></head><body>"
@@ -243,15 +355,9 @@
                     @"<div class=\"badge\">⚡ Instant Share to Android</div>"
                     @"<h2>Received from iPhone</h2>"
                     @"%@"
-                    @"<a href=\"/download\" class=\"btn\" download=\"%@\">%@</a>"
-                    @"<p class=\"hint\">✅ Saves directly to your Android device storage and appears in your Gallery / Downloads instantly.</p>"
                     @"</div>"
-                    @"<script>"
-                    @"setTimeout(function(){"
-                    @"  var a=document.createElement('a');a.href='/download';a.download='%@';document.body.appendChild(a);a.click();"
-                    @"},600);"
-                    @"</script></body></html>",
-                    previewHTML, self->_fileName, btnText, self->_fileName];
+                    @"<script>%@</script></body></html>",
+                    bodyContent, autoScript];
 
                 NSData *htmlData = [html dataUsingEncoding:NSUTF8StringEncoding];
                 NSString *headers = [NSString stringWithFormat:
@@ -400,6 +506,9 @@
                                                handler:^(UIAlertAction *_) {
             NSURL *url = [NSURL URLWithString:@"App-Prefs:root=INTERNET_TETHERING"];
             if (![[UIApplication sharedApplication] canOpenURL:url]) {
+                url = [NSURL URLWithString:@"prefs:root=INTERNET_TETHERING"];
+            }
+            if (![[UIApplication sharedApplication] canOpenURL:url]) {
                 url = [NSURL URLWithString:UIApplicationOpenSettingsURLString];
             }
             [[UIApplication sharedApplication] openURL:url options:@{} completionHandler:nil];
@@ -421,12 +530,12 @@
         return;
     }
 
-    NSURL *fileURL = self.fileURLs.firstObject;
-    NSString *url = [[BSSimpleHTTPServer sharedServer] startWithFileURL:fileURL];
+    NSString *errorReason = nil;
+    NSString *url = [[BSSimpleHTTPServer sharedServer] startWithFileURLs:self.fileURLs errorReason:&errorReason];
     if (!url) {
         UIAlertController *err = [UIAlertController
             alertControllerWithTitle:@"Could Not Start Transfer"
-                             message:@"Please verify your Wi-Fi or Personal Hotspot connection and try again."
+                             message:errorReason ?: @"Please verify your Wi-Fi or Personal Hotspot connection and try again."
                       preferredStyle:UIAlertControllerStyleAlert];
         [err addAction:[UIAlertAction actionWithTitle:@"OK" style:UIAlertActionStyleDefault handler:^(UIAlertAction *_) {
             [self didTapDone];
@@ -439,15 +548,19 @@
     NSString *conn = [[BSSimpleHTTPServer sharedServer] connectionType];
     self.badgeLabel.text = [NSString stringWithFormat:@"   ● Connected via %@   ", conn];
 
-    // Format file info
-    NSString *fileName = fileURL.lastPathComponent ?: @"File";
-    NSDictionary *attrs = [[NSFileManager defaultManager] attributesOfItemAtPath:fileURL.path error:nil];
-    unsigned long long fileSize = attrs.fileSize;
-    if (fileSize > 0) {
-        NSString *sizeStr = [NSByteCountFormatter stringFromByteCount:fileSize countStyle:NSByteCountFormatterCountStyleFile];
-        self.fileInfoLabel.text = [NSString stringWithFormat:@"%@ (%@)", fileName, sizeStr];
+    if (self.fileURLs.count == 1) {
+        NSURL *fileURL = self.fileURLs.firstObject;
+        NSString *fileName = fileURL.lastPathComponent ?: @"File";
+        NSDictionary *attrs = [[NSFileManager defaultManager] attributesOfItemAtPath:fileURL.path error:nil];
+        unsigned long long fileSize = attrs.fileSize;
+        if (fileSize > 0) {
+            NSString *sizeStr = [NSByteCountFormatter stringFromByteCount:fileSize countStyle:NSByteCountFormatterCountStyleFile];
+            self.fileInfoLabel.text = [NSString stringWithFormat:@"%@ (%@)", fileName, sizeStr];
+        } else {
+            self.fileInfoLabel.text = fileName;
+        }
     } else {
-        self.fileInfoLabel.text = fileName;
+        self.fileInfoLabel.text = [NSString stringWithFormat:@"Sharing %lu items", (unsigned long)self.fileURLs.count];
     }
 
     // Generate QR Code
