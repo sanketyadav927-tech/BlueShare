@@ -7,6 +7,16 @@
         <key>Bundles</key>
         <array>
             <string>com.apple.UIKit</string>
+            <string>com.apple.mobileslideshow</string>
+            <string>com.apple.camera</string>
+            <string>com.apple.springboard</string>
+            <string>com.apple.DocumentsApp</string>
+            <string>com.apple.mobilesafari</string>
+            <string>com.apple.mobilenotes</string>
+        </array>
+        <key>Classes</key>
+        <array>
+            <string>UIActivityViewController</string>
         </array>
     </dict>
 </dict>

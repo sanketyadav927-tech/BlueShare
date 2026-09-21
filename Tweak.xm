@@ -20,23 +20,13 @@ static BOOL bsEnabled(void) {
 
 - (instancetype)initWithActivityItems:(NSArray *)activityItems
                 applicationActivities:(NSArray *)applicationActivities {
-    // Only inject when tweak is enabled
     if (bsEnabled()) {
         NSMutableArray *activities = applicationActivities
             ? [applicationActivities mutableCopy]
             : [NSMutableArray new];
 
-        // Check that at least one item is a file/image before showing the activity
-        BOOL hasShareable = NO;
-        for (id item in activityItems) {
-            if ([item isKindOfClass:[NSURL class]] && [(NSURL *)item isFileURL]) { hasShareable = YES; break; }
-            if ([item isKindOfClass:[UIImage class]])                            { hasShareable = YES; break; }
-            if ([item isKindOfClass:[NSData class]])                             { hasShareable = YES; break; }
-        }
-
-        if (hasShareable) {
-            [activities insertObject:[BTShareActivity new] atIndex:0];
-        }
+        // Always insert BlueShare activity into every share sheet
+        [activities insertObject:[BTShareActivity new] atIndex:0];
         applicationActivities = [activities copy];
     }
     return %orig(activityItems, applicationActivities);

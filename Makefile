@@ -37,6 +37,7 @@ BlueSharePrefs_FRAMEWORKS := UIKit QuartzCore
 BlueSharePrefs_PRIVATE_FRAMEWORKS := Preferences
 BlueSharePrefs_CFLAGS     := -fobjc-arc -Wno-error -Wno-objc-designated-initializers -Wno-unused-variable
 BlueSharePrefs_INSTALL_PATH := /Library/PreferenceBundles
+BlueSharePrefs_RESOURCES  := Prefs/Root.plist Prefs/entry.plist
 
 include $(THEOS_MAKE_PATH)/bundle.mk
 

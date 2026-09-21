@@ -1,0 +1,96 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>items</key>
+    <array>
+        <dict>
+            <key>cell</key>
+            <string>PSGroupCell</string>
+            <key>label</key>
+            <string>General</string>
+            <key>footerText</key>
+            <string>Share any file with nearby iPhones over Bluetooth.</string>
+        </dict>
+        <dict>
+            <key>cell</key>
+            <string>PSSwitchCell</string>
+            <key>default</key>
+            <true/>
+            <key>defaults</key>
+            <string>com.yourrepo.blueshare</string>
+            <key>key</key>
+            <string>BSEnabled</string>
+            <key>label</key>
+            <string>Enable BlueShare</string>
+        </dict>
+
+        <dict>
+            <key>cell</key>
+            <string>PSGroupCell</string>
+            <key>label</key>
+            <string>Save Location</string>
+            <key>footerText</key>
+            <string>Received files are saved here.</string>
+        </dict>
+        <dict>
+            <key>cell</key>
+            <string>PSTitleValueCell</string>
+            <key>label</key>
+            <string>Files Folder</string>
+            <key>get</key>
+            <string>savePathValue</string>
+        </dict>
+
+        <dict>
+            <key>cell</key>
+            <string>PSGroupCell</string>
+            <key>label</key>
+            <string>SpringBoard</string>
+            <key>footerText</key>
+            <string>Respring to apply changes after toggling.</string>
+        </dict>
+        <dict>
+            <key>cell</key>
+            <string>PSButtonCell</string>
+            <key>action</key>
+            <string>respring</string>
+            <key>label</key>
+            <string>Respring Device</string>
+        </dict>
+
+        <dict>
+            <key>cell</key>
+            <string>PSGroupCell</string>
+            <key>label</key>
+            <string>About</string>
+        </dict>
+        <dict>
+            <key>cell</key>
+            <string>PSTitleValueCell</string>
+            <key>label</key>
+            <string>Developer</string>
+            <key>get</key>
+            <string>authorValue</string>
+        </dict>
+        <dict>
+            <key>cell</key>
+            <string>PSTitleValueCell</string>
+            <key>label</key>
+            <string>Version</string>
+            <key>get</key>
+            <string>versionValue</string>
+        </dict>
+        <dict>
+            <key>cell</key>
+            <string>PSTitleValueCell</string>
+            <key>label</key>
+            <string>Package</string>
+            <key>get</key>
+            <string>packageValue</string>
+        </dict>
+    </array>
+    <key>title</key>
+    <string>BlueShare</string>
+</dict>
+</plist>

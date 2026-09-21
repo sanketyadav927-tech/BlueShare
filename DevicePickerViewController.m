@@ -217,11 +217,18 @@
 // ── BSTransferManagerDelegate (sender side) ───────────────────────────────────
 
 - (void)transferManager:(id)mgr didDiscoverPeer:(CBPeripheral *)peer name:(NSString *)name {
+    for (BSPeer *existing in self.peers) {
+        if ([existing.peripheral.identifier isEqual:peer.identifier]) {
+            return;
+        }
+    }
     BSPeer *p = [BSPeer new];
     p.peripheral   = peer;
-    p.displayName  = name;
+    p.displayName  = (name && name.length > 0) ? name : @"Nearby iPhone";
     [self.peers addObject:p];
-    [self.tableView reloadData];
+    dispatch_async(dispatch_get_main_queue(), ^{
+        [self.tableView reloadData];
+    });
 }
 
 - (void)transferManager:(id)mgr sendProgress:(float)progress {
