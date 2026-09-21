@@ -63,12 +63,18 @@ jobs:
       - name: Install ldid
         run: brew install ldid
 
-      # ── 7. Build ──────────────────────────────────────────────────────────────
-      - name: Build
+      # ── 7. Build Rootful & Rootless packages ───────────────────────────────
+      - name: Build Rootful (.deb)
         run: |
           export PATH="$THEOS/bin:$PATH"
           make clean
           make package FINALPACKAGE=1
+
+      - name: Build Rootless (.deb)
+        run: |
+          export PATH="$THEOS/bin:$PATH"
+          make clean
+          make package FINALPACKAGE=1 THEOS_PACKAGE_SCHEME=rootless
 
       # ── 8. Show output ────────────────────────────────────────────────────────
       - name: List packages

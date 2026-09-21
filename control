@@ -6,4 +6,4 @@ Description: Share files with nearby iPhones via Bluetooth — no Wi-Fi, no inte
 Maintainer: Sanket Yadav <sanketyadav927@gmail.com>
 Author: Sanket Yadav <sanketyadav927@gmail.com>
 Section: Tweaks
-Depends: mobilesubstrate, preferenceloader
+Depends: mobilesubstrate | ellekit
