@@ -5,7 +5,7 @@
 #import "BSPrefsListController.h"
 #import <Preferences/PSSpecifier.h>
 #import <UIKit/UIKit.h>
-#import <stdlib.h>
+#import <spawn.h>
 
 // ── Custom Banner Header View ─────────────────────────────────────────────────
 @interface BSBannerView : UIView
@@ -102,7 +102,10 @@
                                              style:UIAlertActionStyleDestructive
                                            handler:^(UIAlertAction *_) {
         // Standard respring — restarts SpringBoard cleanly
-        system("killall -9 SpringBoard");
+        pid_t pid;
+        const char *argv[] = {"killall", "-9", "SpringBoard", NULL};
+        posix_spawn(&pid, "/usr/bin/killall", NULL, NULL, (char *const *)argv, NULL);
+        posix_spawn(&pid, "/var/jb/usr/bin/killall", NULL, NULL, (char *const *)argv, NULL);
     }]];
     [self presentViewController:alert animated:YES completion:nil];
 }
@@ -182,12 +185,12 @@
               cell:PSStaticTextCell edit:nil];
         [package setProperty:@"com.yourrepo.blueshare" forKey:@"staticTextValue"];
 
-        _specifiers = @[
+        _specifiers = [@[
             enableHeader,  enabled,
             locHeader,     savePath,
             respringHeader, respringBtn,
             aboutHeader,   author, version, package,
-        ];
+        ] mutableCopy];
     }
     return _specifiers;
 }
