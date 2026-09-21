@@ -5,6 +5,7 @@
 #import <UIKit/UIKit.h>
 #import <UserNotifications/UserNotifications.h>
 #import <dlfcn.h>
+#import <objc/message.h>
 
 // ── UUIDs ────────────────────────────────────────────────────────────────────
 NSString *const kBSServiceUUID      = @"BA5E5001-F96A-4D21-9C2B-3A1D8E4F0123";
@@ -72,6 +73,7 @@ static const NSUInteger kChunkSize  = 512;   // bytes per BLE write packet
 @property (nonatomic) BOOL                               isScanningRequested;
 @property (nonatomic, strong) id                                btClassicManager;
 @property (nonatomic, strong) NSMutableArray                   *discoveredClassicAddresses;
+@property (nonatomic, strong) NSTimer                          *classicPollTimer;
 
 // Sender state
 @property (nonatomic, strong) NSData                    *fileData;
@@ -117,6 +119,14 @@ static const NSUInteger kChunkSize  = 512;   // bytes per BLE write packet
             #pragma clang diagnostic ignored "-Warc-performSelector-leaks"
             _btClassicManager = [BMClass performSelector:@selector(sharedInstance)];
             #pragma clang diagnostic pop
+            if (_btClassicManager) {
+                if ([_btClassicManager respondsToSelector:@selector(setPowered:)]) {
+                    ((void (*)(id, SEL, BOOL))objc_msgSend)(_btClassicManager, @selector(setPowered:), YES);
+                }
+                if ([_btClassicManager respondsToSelector:@selector(setEnabled:)]) {
+                    ((void (*)(id, SEL, BOOL))objc_msgSend)(_btClassicManager, @selector(setEnabled:), YES);
+                }
+            }
         }
     }
     return self;
@@ -160,30 +170,50 @@ static const NSUInteger kChunkSize  = 512;   // bytes per BLE write packet
         [[NSNotificationCenter defaultCenter] removeObserver:self
                                                         name:@"BluetoothDeviceDiscoveredNotification"
                                                       object:nil];
+        [[NSNotificationCenter defaultCenter] removeObserver:self
+                                                        name:@"BluetoothDeviceUpdatedNotification"
+                                                      object:nil];
         [[NSNotificationCenter defaultCenter] addObserver:self
                                                  selector:@selector(bluetoothClassicDeviceDiscovered:)
                                                      name:@"BluetoothDeviceDiscoveredNotification"
                                                    object:nil];
+        [[NSNotificationCenter defaultCenter] addObserver:self
+                                                 selector:@selector(bluetoothClassicDeviceDiscovered:)
+                                                     name:@"BluetoothDeviceUpdatedNotification"
+                                                   object:nil];
         @try {
-            // Load paired devices immediately
-            if ([self.btClassicManager respondsToSelector:@selector(pairedDevices)]) {
-                #pragma clang diagnostic push
-                #pragma clang diagnostic ignored "-Warc-performSelector-leaks"
-                NSArray *paired = [self.btClassicManager performSelector:@selector(pairedDevices)];
-                #pragma clang diagnostic pop
-                for (id dev in paired) {
-                    [self processClassicDevice:dev];
-                }
+            if ([self.btClassicManager respondsToSelector:@selector(setPowered:)]) {
+                ((void (*)(id, SEL, BOOL))objc_msgSend)(self.btClassicManager, @selector(setPowered:), YES);
+            }
+            if ([self.btClassicManager respondsToSelector:@selector(setEnabled:)]) {
+                ((void (*)(id, SEL, BOOL))objc_msgSend)(self.btClassicManager, @selector(setEnabled:), YES);
             }
 
-            // Start Bluetooth Classic device inquiry
+            // Start Bluetooth Classic device inquiry using correct BOOL ABI
             if ([self.btClassicManager respondsToSelector:@selector(setDeviceScanningEnabled:)]) {
-                #pragma clang diagnostic push
-                #pragma clang diagnostic ignored "-Warc-performSelector-leaks"
-                [self.btClassicManager performSelector:@selector(setDeviceScanningEnabled:) withObject:(id)kCFBooleanTrue];
-                #pragma clang diagnostic pop
-                NSLog(@"[BlueShare] Bluetooth Classic inquiry scanning enabled.");
+                ((void (*)(id, SEL, BOOL))objc_msgSend)(self.btClassicManager, @selector(setDeviceScanningEnabled:), YES);
+                NSLog(@"[BlueShare] Bluetooth Classic inquiry scanning enabled (YES).");
             }
+            if ([self.btClassicManager respondsToSelector:@selector(setDevicePairingEnabled:)]) {
+                ((void (*)(id, SEL, BOOL))objc_msgSend)(self.btClassicManager, @selector(setDevicePairingEnabled:), YES);
+            }
+            if ([self.btClassicManager respondsToSelector:@selector(scanForConnectableDevices:)]) {
+                ((void (*)(id, SEL, unsigned int))objc_msgSend)(self.btClassicManager, @selector(scanForConnectableDevices:), 0);
+            }
+            if ([self.btClassicManager respondsToSelector:@selector(scanForServices:)]) {
+                ((void (*)(id, SEL, unsigned int))objc_msgSend)(self.btClassicManager, @selector(scanForServices:), 0xFFFFFFFF);
+            }
+
+            // Immediately poll paired & discovered devices
+            [self pollClassicDevices];
+
+            // Periodically poll discovered devices every 1.5s
+            [self.classicPollTimer invalidate];
+            self.classicPollTimer = [NSTimer scheduledTimerWithTimeInterval:1.5
+                                                                     target:self
+                                                                   selector:@selector(pollClassicDevices)
+                                                                   userInfo:nil
+                                                                    repeats:YES];
         } @catch (NSException *e) {
             NSLog(@"[BlueShare] Bluetooth Classic scan error: %@", e);
         }
@@ -195,18 +225,43 @@ static const NSUInteger kChunkSize  = 512;   // bytes per BLE write packet
     if (_central) {
         [_central stopScan];
     }
+    [self.classicPollTimer invalidate];
+    self.classicPollTimer = nil;
     if (self.btClassicManager) {
         @try {
             if ([self.btClassicManager respondsToSelector:@selector(setDeviceScanningEnabled:)]) {
-                #pragma clang diagnostic push
-                #pragma clang diagnostic ignored "-Warc-performSelector-leaks"
-                [self.btClassicManager performSelector:@selector(setDeviceScanningEnabled:) withObject:(id)kCFBooleanFalse];
-                #pragma clang diagnostic pop
+                ((void (*)(id, SEL, BOOL))objc_msgSend)(self.btClassicManager, @selector(setDeviceScanningEnabled:), NO);
+            }
+            if ([self.btClassicManager respondsToSelector:@selector(setDevicePairingEnabled:)]) {
+                ((void (*)(id, SEL, BOOL))objc_msgSend)(self.btClassicManager, @selector(setDevicePairingEnabled:), NO);
             }
         } @catch (NSException *_) {}
         [[NSNotificationCenter defaultCenter] removeObserver:self
                                                         name:@"BluetoothDeviceDiscoveredNotification"
                                                       object:nil];
+        [[NSNotificationCenter defaultCenter] removeObserver:self
+                                                        name:@"BluetoothDeviceUpdatedNotification"
+                                                      object:nil];
+    }
+}
+
+- (void)pollClassicDevices {
+    if (!self.btClassicManager) return;
+    @try {
+        if ([self.btClassicManager respondsToSelector:@selector(pairedDevices)]) {
+            NSArray *paired = ((NSArray *(*)(id, SEL))objc_msgSend)(self.btClassicManager, @selector(pairedDevices));
+            for (id dev in paired) {
+                [self processClassicDevice:dev];
+            }
+        }
+        if ([self.btClassicManager respondsToSelector:@selector(discoveredDevices)]) {
+            NSArray *discovered = ((NSArray *(*)(id, SEL))objc_msgSend)(self.btClassicManager, @selector(discoveredDevices));
+            for (id dev in discovered) {
+                [self processClassicDevice:dev];
+            }
+        }
+    } @catch (NSException *e) {
+        NSLog(@"[BlueShare] pollClassicDevices error: %@", e);
     }
 }
 
@@ -221,19 +276,13 @@ static const NSUInteger kChunkSize  = 512;   // bytes per BLE write packet
     @try {
         NSString *name = nil;
         if ([device respondsToSelector:@selector(name)]) {
-            #pragma clang diagnostic push
-            #pragma clang diagnostic ignored "-Warc-performSelector-leaks"
-            name = [device performSelector:@selector(name)];
-            #pragma clang diagnostic pop
+            name = ((NSString *(*)(id, SEL))objc_msgSend)(device, @selector(name));
         }
         if (!name || name.length == 0) return;
 
         NSString *addr = nil;
         if ([device respondsToSelector:@selector(address)]) {
-            #pragma clang diagnostic push
-            #pragma clang diagnostic ignored "-Warc-performSelector-leaks"
-            addr = [device performSelector:@selector(address)];
-            #pragma clang diagnostic pop
+            addr = ((NSString *(*)(id, SEL))objc_msgSend)(device, @selector(address));
         }
 
         NSString *identifier = addr ?: name;

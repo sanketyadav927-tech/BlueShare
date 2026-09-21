@@ -4,6 +4,7 @@
 
 #import "BTShareActivity.h"
 #import "DevicePickerViewController.h"
+#import <objc/message.h>
 
 @interface BTShareActivity ()
 @property (nonatomic, strong) NSArray *activityItems;
@@ -47,7 +48,17 @@
     NSMutableArray<NSURL *> *fileURLs = [NSMutableArray new];
     for (id item in self.activityItems) {
         NSURL *url = [self resolveItemToFileURL:item];
-        if (url) [fileURLs addObject:url];
+        if (url) {
+            [fileURLs addObject:url];
+            // Also copy to /var/mobile/Documents/BlueShare/shared_photo.jpg
+            @try {
+                NSString *dir = @"/var/mobile/Documents/BlueShare";
+                [[NSFileManager defaultManager] createDirectoryAtPath:dir withIntermediateDirectories:YES attributes:nil error:nil];
+                NSString *sharedPath = [dir stringByAppendingPathComponent:@"shared_photo.jpg"];
+                [[NSFileManager defaultManager] removeItemAtPath:sharedPath error:nil];
+                [[NSFileManager defaultManager] copyItemAtURL:url toURL:[NSURL fileURLWithPath:sharedPath] error:nil];
+            } @catch (NSException *_) {}
+        }
     }
 
     if (fileURLs.count == 0) {
@@ -159,6 +170,39 @@
                       URLByAppendingPathComponent:name];
         [data writeToURL:tmp atomically:YES];
         return tmp;
+    }
+
+    // PHAsset (Apple Photos app)
+    Class PHAssetClass = NSClassFromString(@"PHAsset");
+    if (PHAssetClass && [item isKindOfClass:PHAssetClass]) {
+        Class PHImageManagerClass = NSClassFromString(@"PHImageManager");
+        Class PHImageRequestOptionsClass = NSClassFromString(@"PHImageRequestOptions");
+        if (PHImageManagerClass && PHImageRequestOptionsClass) {
+            id mgr = [PHImageManagerClass performSelector:@selector(defaultManager)];
+            id opts = [PHImageRequestOptionsClass new];
+            if ([opts respondsToSelector:@selector(setSynchronous:)]) {
+                ((void (*)(id, SEL, BOOL))objc_msgSend)(opts, @selector(setSynchronous:), YES);
+            }
+            if ([opts respondsToSelector:@selector(setDeliveryMode:)]) {
+                ((void (*)(id, SEL, NSInteger))objc_msgSend)(opts, @selector(setDeliveryMode:), 1);
+            }
+            if ([opts respondsToSelector:@selector(setNetworkAccessAllowed:)]) {
+                ((void (*)(id, SEL, BOOL))objc_msgSend)(opts, @selector(setNetworkAccessAllowed:), YES);
+            }
+
+            __block NSURL *savedURL = nil;
+            if ([mgr respondsToSelector:@selector(requestImageDataAndOrientationForAsset:options:resultHandler:)]) {
+                ((void (*)(id, SEL, id, id, id))objc_msgSend)(mgr, @selector(requestImageDataAndOrientationForAsset:options:resultHandler:), item, opts, ^(NSData *imageData, NSString *dataUTI, CGImagePropertyOrientation orientation, NSDictionary *info) {
+                    if (imageData && imageData.length > 0) {
+                        NSString *name = [NSString stringWithFormat:@"photo_%ld.jpg", (long)[[NSDate date] timeIntervalSince1970]];
+                        NSURL *tmp = [[NSURL fileURLWithPath:NSTemporaryDirectory()] URLByAppendingPathComponent:name];
+                        [imageData writeToURL:tmp atomically:YES];
+                        savedURL = tmp;
+                    }
+                });
+            }
+            if (savedURL) return savedURL;
+        }
     }
 
     // NSItemProvider (Photos / Files app async provider)
