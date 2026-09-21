@@ -41,37 +41,9 @@ static NSArray *injectBTShareActivity(NSArray *activities) {
     return %orig(items, activities, excluded);
 }
 
-- (NSArray *)applicationActivities {
-    return injectBTShareActivity(%orig);
-}
-
-- (NSArray *)_customActivities {
-    return injectBTShareActivity(%orig);
-}
-
-- (void)viewDidLoad {
-    %orig;
-    @try {
-        if (bsEnabled()) {
-            NSArray *current = [self applicationActivities];
-            BOOL found = NO;
-            for (id act in current) {
-                if ([act isKindOfClass:[BTShareActivity class]]) {
-                    found = YES;
-                    break;
-                }
-            }
-            if (!found) {
-                NSMutableArray *mut = current ? [current mutableCopy] : [NSMutableArray new];
-                [mut addObject:[BTShareActivity new]];
-                @try {
-                    [self setValue:[mut copy] forKey:@"_applicationActivities"];
-                } @catch (NSException *_) {}
-            }
-        }
-    } @catch (NSException *e) {
-        NSLog(@"[BlueShare] viewDidLoad hook error: %@", e);
-    }
+- (id)_initWithActivityItems:(id)items applicationActivities:(id)activities {
+    activities = injectBTShareActivity(activities);
+    return %orig(items, activities);
 }
 
 %end
