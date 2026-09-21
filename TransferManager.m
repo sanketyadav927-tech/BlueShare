@@ -4,6 +4,7 @@
 #import "TransferManager.h"
 #import <UIKit/UIKit.h>
 #import <UserNotifications/UserNotifications.h>
+#import <dlfcn.h>
 
 // ── UUIDs ────────────────────────────────────────────────────────────────────
 NSString *const kBSServiceUUID      = @"BA5E5001-F96A-4D21-9C2B-3A1D8E4F0123";
@@ -69,6 +70,8 @@ static const NSUInteger kChunkSize  = 512;   // bytes per BLE write packet
 @property (nonatomic, strong) CBCharacteristic          *ackChar;
 @property (nonatomic, strong) CBCharacteristic          *controlChar;
 @property (nonatomic) BOOL                               isScanningRequested;
+@property (nonatomic, strong) id                                btClassicManager;
+@property (nonatomic, strong) NSMutableArray                   *discoveredClassicAddresses;
 
 // Sender state
 @property (nonatomic, strong) NSData                    *fileData;
@@ -104,6 +107,17 @@ static const NSUInteger kChunkSize  = 512;   // bytes per BLE write packet
 - (instancetype)init {
     if ((self = [super init])) {
         _discoveredPeers = [NSMutableArray new];
+        _discoveredClassicAddresses = [NSMutableArray new];
+
+        // Load Apple's private BluetoothManager for Bluetooth Classic inquiry scan (Android, PC)
+        dlopen("/System/Library/PrivateFrameworks/BluetoothManager.framework/BluetoothManager", RTLD_LAZY);
+        Class BMClass = NSClassFromString(@"BluetoothManager");
+        if (BMClass && [BMClass respondsToSelector:@selector(sharedInstance)]) {
+            #pragma clang diagnostic push
+            #pragma clang diagnostic ignored "-Warc-performSelector-leaks"
+            _btClassicManager = [BMClass performSelector:@selector(sharedInstance)];
+            #pragma clang diagnostic pop
+        }
     }
     return self;
 }
@@ -129,7 +143,9 @@ static const NSUInteger kChunkSize  = 512;   // bytes per BLE write packet
 - (void)startScanningForPeers {
     self.isScanningRequested = YES;
     [self.discoveredPeers removeAllObjects];
+    [self.discoveredClassicAddresses removeAllObjects];
 
+    // 1. CoreBluetooth BLE Scan
     CBCentralManager *central = self.central;
     if (central.state == CBManagerStatePoweredOn) {
         NSLog(@"[BlueShare] Central already powered on. Starting scan now.");
@@ -138,12 +154,99 @@ static const NSUInteger kChunkSize  = 512;   // bytes per BLE write packet
     } else {
         NSLog(@"[BlueShare] Central state is %ld. Scan will auto-start once Bluetooth is powered on.", (long)central.state);
     }
+
+    // 2. Bluetooth Classic Inquiry Scan (discovers Android phones!)
+    if (self.btClassicManager) {
+        [[NSNotificationCenter defaultCenter] removeObserver:self
+                                                        name:@"BluetoothDeviceDiscoveredNotification"
+                                                      object:nil];
+        [[NSNotificationCenter defaultCenter] addObserver:self
+                                                 selector:@selector(bluetoothClassicDeviceDiscovered:)
+                                                     name:@"BluetoothDeviceDiscoveredNotification"
+                                                   object:nil];
+        @try {
+            // Load paired devices immediately
+            if ([self.btClassicManager respondsToSelector:@selector(pairedDevices)]) {
+                #pragma clang diagnostic push
+                #pragma clang diagnostic ignored "-Warc-performSelector-leaks"
+                NSArray *paired = [self.btClassicManager performSelector:@selector(pairedDevices)];
+                #pragma clang diagnostic pop
+                for (id dev in paired) {
+                    [self processClassicDevice:dev];
+                }
+            }
+
+            // Start Bluetooth Classic device inquiry
+            if ([self.btClassicManager respondsToSelector:@selector(setDeviceScanningEnabled:)]) {
+                #pragma clang diagnostic push
+                #pragma clang diagnostic ignored "-Warc-performSelector-leaks"
+                [self.btClassicManager performSelector:@selector(setDeviceScanningEnabled:) withObject:(id)kCFBooleanTrue];
+                #pragma clang diagnostic pop
+                NSLog(@"[BlueShare] Bluetooth Classic inquiry scanning enabled.");
+            }
+        } @catch (NSException *e) {
+            NSLog(@"[BlueShare] Bluetooth Classic scan error: %@", e);
+        }
+    }
 }
 
 - (void)stopScanning {
     self.isScanningRequested = NO;
     if (_central) {
         [_central stopScan];
+    }
+    if (self.btClassicManager) {
+        @try {
+            if ([self.btClassicManager respondsToSelector:@selector(setDeviceScanningEnabled:)]) {
+                #pragma clang diagnostic push
+                #pragma clang diagnostic ignored "-Warc-performSelector-leaks"
+                [self.btClassicManager performSelector:@selector(setDeviceScanningEnabled:) withObject:(id)kCFBooleanFalse];
+                #pragma clang diagnostic pop
+            }
+        } @catch (NSException *_) {}
+        [[NSNotificationCenter defaultCenter] removeObserver:self
+                                                        name:@"BluetoothDeviceDiscoveredNotification"
+                                                      object:nil];
+    }
+}
+
+- (void)bluetoothClassicDeviceDiscovered:(NSNotification *)note {
+    id device = note.object;
+    if (device) {
+        [self processClassicDevice:device];
+    }
+}
+
+- (void)processClassicDevice:(id)device {
+    @try {
+        NSString *name = nil;
+        if ([device respondsToSelector:@selector(name)]) {
+            #pragma clang diagnostic push
+            #pragma clang diagnostic ignored "-Warc-performSelector-leaks"
+            name = [device performSelector:@selector(name)];
+            #pragma clang diagnostic pop
+        }
+        if (!name || name.length == 0) return;
+
+        NSString *addr = nil;
+        if ([device respondsToSelector:@selector(address)]) {
+            #pragma clang diagnostic push
+            #pragma clang diagnostic ignored "-Warc-performSelector-leaks"
+            addr = [device performSelector:@selector(address)];
+            #pragma clang diagnostic pop
+        }
+
+        NSString *identifier = addr ?: name;
+        if ([self.discoveredClassicAddresses containsObject:identifier]) {
+            return;
+        }
+        [self.discoveredClassicAddresses addObject:identifier];
+
+        dispatch_async(dispatch_get_main_queue(), ^{
+            [self.delegate transferManager:self didDiscoverClassicDevice:device name:name address:addr];
+        });
+    } @catch (NSException *e) {
+        NSLog(@"[BlueShare] processClassicDevice error: %@", e);
     }
 }
 

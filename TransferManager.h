@@ -31,6 +31,7 @@ extern NSString *const kBSControlCharUUID;        // "ACCEPT" / "REJECT" / "DONE
 // Sender side
 - (void)transferManager:(id)mgr didUpdateBluetoothState:(CBManagerState)state;
 - (void)transferManager:(id)mgr didDiscoverPeer:(CBPeripheral *)peer name:(NSString *)name;
+- (void)transferManager:(id)mgr didDiscoverClassicDevice:(id)device name:(NSString *)name address:(nullable NSString *)address;
 - (void)transferManager:(id)mgr didConnectToPeer:(CBPeripheral *)peer;
 - (void)transferManager:(id)mgr sendProgress:(float)progress;          // 0.0 – 1.0
 - (void)transferManager:(id)mgr didFinishSendingToPeer:(CBPeripheral *)peer;
