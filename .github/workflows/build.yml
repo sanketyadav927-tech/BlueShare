@@ -67,12 +67,14 @@ jobs:
       - name: Build Rootful (.deb)
         run: |
           export PATH="$THEOS/bin:$PATH"
+          chmod -R 755 layout/DEBIAN/ || true
           make clean
           make package FINALPACKAGE=1
 
       - name: Build Rootless (.deb)
         run: |
           export PATH="$THEOS/bin:$PATH"
+          chmod -R 755 layout/DEBIAN/ || true
           make clean
           make package FINALPACKAGE=1 THEOS_PACKAGE_SCHEME=rootless
 
